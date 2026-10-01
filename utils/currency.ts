@@ -29,7 +29,10 @@ export function formatAmount(minorUnits: number) {
   const amount = BigInt(minorUnits);
   const magnitude = amount < 0n ? -amount : amount;
   const formatter = new Intl.NumberFormat(currency.locale, { style: 'currency', currency: currency.code });
-  const parts = formatter.formatToParts(magnitude / 100n);
+  // Hermes Intl expects a number. Whole euros are within the safe-integer range;
+  // convert only after integer division, keeping fractional cents exact below.
+  const wholeUnits = Number(magnitude / 100n);
+  const parts = formatter.formatToParts(wholeUnits);
   const formatted = parts.map((part) => part.type === 'fraction' ? String(magnitude % 100n).padStart(2, '0') : part.value).join('');
   return amount < 0n ? `-${formatted}` : formatted;
 }

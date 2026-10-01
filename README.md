@@ -1,10 +1,10 @@
-# Personal finance · Phase 2
+# Personal finance · Phase 4
 
-A personal Android-first finance app with a shared React Native codebase for future iOS release. The existing navigation/UI foundation now includes a core local financial database and validated repositories. Screens remain placeholders: full entry/list/statistics UI, synchronization, authentication, reminders, biometric locking and exports are not implemented.
+A personal Android-first finance app with a shared React Native codebase for future iOS release. Daily transaction entry, searchable history, editing/deletion, account management, auditable balance adjustments and the Home dashboard now use the existing local database. SQLite remains authoritative. Day/week/month/year/custom statistics, category drilldowns and combined transaction filters are implemented. Synchronization, authentication, reminders, biometric locking and exports remain for future phases.
 
 ## Stack
 
-Expo SDK 57, React Native, strict TypeScript, Expo Router, Expo SQLite, Supabase, Zustand, React Hook Form, Zod/resolvers, SecureStore, LocalAuthentication, Notifications and date-fns. Expo Crypto supplies native UUID generation. Native dependencies use Expo-compatible versions. The package lock records installed versions.
+Expo SDK 57, React Native, strict TypeScript, Expo Router, Expo SQLite, Supabase, Zustand, React Hook Form, Zod/resolvers, SecureStore, LocalAuthentication, Notifications and date-fns. Expo Crypto supplies native UUID generation; the community DateTimePicker supplies native Android/iOS date selection. Native dependencies use Expo-compatible versions. The package lock records installed versions.
 
 ## Prerequisites and installation
 
@@ -38,18 +38,18 @@ Ensure `ANDROID_HOME` points at the SDK (typically `%LOCALAPPDATA%\Android\Sdk`)
 
 ## Structure
 
-- `app/`: five tab routes, cloud account placeholder, add and edit transaction routes.
+- `app/`: Home dashboard, Transactions history/search, Accounts management, transaction details/entry and account detail/create/adjust routes. Statistics includes reports and category detail routes; cloud-account functionality remains a placeholder.
 - `components/ui/`, `components/finance/`: reusable presentation components.
 - `constants/`, `hooks/`, `types/`, `utils/`: theme, currency, typed form pattern, calendar-date utilities and safe diagnostics.
 - `database/`: initialization, ordered migrations, schema types and parameterized repositories.
-- `services/`: Supabase, secure session storage, future sync boundary, permission inspection and biometric capability inspection.
+- `services/`: local finance workflows and dashboard snapshots, Supabase, secure session storage, future sync boundary, permission inspection and biometric capability inspection.
 - `store/`: separate auth, finance UI and settings stores. Financial records belong in SQLite, not Zustand.
 - `assets/`: Expo template icons; replace with final branding later.
 - `tests/`: meaningful SQLite migration and date regression checks using Node's SQLite adapter.
 
 ## Local database architecture
 
-`SQLiteProvider` opens `finance.db` and awaits initialization before rendering routes. WAL and foreign keys are enabled. An exclusive transaction creates the migration ledger and applies pending numbered migrations atomically. Version 1 remains unchanged; version 2 adds finance tables and indexes; version 3 seeds categories. Append migrations with sequential versions; do not modify shipped migrations, seed order or delete user databases. SQL identifiers/statements are trusted code; all external values use bound parameters. Unexpected newer schemas fail safely. Startup errors reach the app error boundary and allow retry without deleting data. See [DATABASE.md](DATABASE.md) for the schema, API and manual repository checks.
+`SQLiteProvider` opens `finance.db` and awaits initialization before rendering routes. WAL and foreign keys are enabled. An exclusive transaction creates the migration ledger and applies pending numbered migrations atomically. Version 1 remains unchanged; version 2 adds finance tables and indexes; version 3 seeds categories; version 4 adds reporting/search support. Append migrations with sequential versions; do not modify shipped migrations, seed order or delete user databases. SQL identifiers/statements are trusted code; all external values use bound parameters. Unexpected newer schemas fail safely. Startup errors reach the app error boundary and allow retry without deleting data. See [DATABASE.md](DATABASE.md) for the schema, API and manual repository checks.
 
 UI → local repositories → future sync service → Supabase is the intended data flow. Supabase credentials and network access are not needed to open the local app. Sync currently reports `not-configured` and performs no network writes.
 
@@ -65,17 +65,18 @@ npx expo install --check
 npx expo export --platform android
 ```
 
-Phase 2 database/business logic is implemented. Proceed to Phase 3 only after device checks. Android bundle export verifies compilation, but does not prove native runtime behavior. Tests use real desktop SQLite through an Expo-shaped adapter and substitute only native UUID generation with Node Crypto; they do not replace testing Expo SQLite on Android. See `VALIDATION.md` for this session's results and limitations.
+Phase 4 reporting and filtering functionality is implemented. Android bundle export verifies compilation, but does not prove native runtime behavior. Tests use real file-backed desktop SQLite through an Expo-shaped adapter, substitute native UUID generation with Node Crypto, and close/reopen the database for persistence checks. They do not replace testing Expo SQLite and UI interactions on Android. See `VALIDATION.md`, [PHASE4.md](PHASE4.md) and [PHASE3.md](PHASE3.md) for results and the device checklist.
 
-## Manual checks before Phase 3
+## Manual checks before the next phase
 
 1. Launch on emulator and physical Android. Home should appear after database initialization, with no error screen.
 2. Visit all five tabs; open Add transaction, return with Android back, and open Cloud account from Settings.
-3. Open `finance://transaction/example-id` to verify the edit route in an installed build with the custom scheme (Expo Go uses its own development URL).
+3. Tap a saved transaction in history and verify its details and Edit action. For deep-link testing in an installed build, use `finance://transaction/<actual-record-UUID>` (Expo Go uses its own development URL).
 4. Force-close and reopen. Confirm the database remains available; repeat startup in airplane mode with no Supabase variables.
 5. Check device/light/dark appearance, large system font sizes, narrow screen layouts, keyboard dismissal when future forms arrive, and Android back behavior.
-6. Verify the database has migration versions 1–3 and exactly 25 default categories. Restart without reinstalling; confirm no duplicate categories and existing records/metadata remain.
-7. Follow the repository check in `DATABASE.md` on a development device/test database. Confirm the requested balance sequence, soft deletion and calendar date preservation. The placeholder UI cannot create transactions yet.
-8. Do not expect entry forms, cloud login, reminders or locking to work yet.
+6. Verify the database has migration versions 1–4 and exactly 25 default categories. Restart without reinstalling; confirm no duplicate categories and existing records/metadata remain.
+7. Follow the complete UI workflow in `PHASE3.md`: transaction entry, Save & Add Another, account creation/edit/archive, confirmed deletion, balance adjustment, search and restart persistence.
+8. Follow PHASE4.md for report/filter checks. Cloud login, reminders and locking are not implemented yet.
 
 No permissions are requested on startup. Financial records remain in SQLite; no record cache is duplicated in Zustand. The local SQLite file uses the application's storage sandbox and is not encrypted; SecureStore is reserved for session/security values.
+

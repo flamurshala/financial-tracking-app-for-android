@@ -1,6 +1,6 @@
 # Core local finance database · Phase 2
 
-SQLite remains the source of truth. Repositories accept the database from `useSQLiteContext()`; keep repository calls in hooks/services and future form submit handlers. No SQL belongs in presentation components. No cloud synchronization or new financial UI was added.
+SQLite remains the source of truth. Repositories accept the database from `useSQLiteContext()`; calls are integrated through screen hooks and validated form submit handlers. No SQL belongs in presentation components. Phase 3 adds UI and local workflows without cloud synchronization.
 
 ## Schema and migrations
 
@@ -26,7 +26,7 @@ All canonical amounts are safe integer **cents** in TypeScript and SQLite `INTEG
 
 Account balance = initial balance + all active income − all active expenses, including signed-by-type balance adjustments. Balances are derived from a single SQL snapshot and never stored as mutable counters. Combined balance includes archived accounts because they still represent owned funds; soft-deleted accounts are excluded. Soft-deleted transactions do not affect either balance.
 
-Adjustments have `is_balance_adjustment = true`, a null category and a positive amount. Type `income` increases balance, `expense` decreases it. They are excluded from ordinary income/expense totals. There is no adjustment UI. Totals exclude soft-deleted transactions and are never limited by list pagination.
+Adjustments have `is_balance_adjustment = true`, a null category and a positive amount. Type `income` increases balance, `expense` decreases it. They are excluded from ordinary income/expense totals. The Adjust Balance screen uses `adjustAccountBalance` to compute the difference and create a correction atomically. A zero difference creates no transaction. Totals exclude soft-deleted transactions and are never limited by list pagination.
 
 `transaction_date` remains `YYYY-MM-DD`; created/updated/deleted timestamps are separate event timestamps. No UTC conversion is performed on the financial calendar date.
 
@@ -52,9 +52,17 @@ Create/update inputs are exported from `utils/financeValidation.ts`. Updates rep
 
 Account/category lists hide archives unless explicitly requested. Both-type categories appear in both selection lists. Archived references can be retained while editing historical transactions but cannot be selected for new records or switched onto another transaction. Deleted references are always rejected. Category type changes that conflict with any retained transaction history are rejected, including soft-deleted history. All transaction reference validation and writes share an exclusive transaction.
 
-For future multi-record atomic workflows, add repository operations that share a single transaction connection; do not nest the existing exclusive-write functions inside another exclusive transaction.
+`withWriteTransaction` now opens a dedicated connection to the same file, enables foreign keys and a five-second busy timeout, then acquires `BEGIN IMMEDIATE` before reading/writing. This avoids unrelated asynchronous queries joining a transaction, ensures connection-specific foreign keys are active, and prevents read-then-write balance adjustment races. Do not nest a write wrapper inside another transaction. `createTransactionInTransaction` is the explicit transaction-aware insertion primitive.
 
-## Manual device verification before Phase 3
+## Phase 3 additions
+
+- `services/finance.ts`: `saveEntry` atomically writes the transaction and last-account preference; `getLastAccount`; `adjustAccountBalance`; `getDashboard` obtains a consistent balance/month/day/recent snapshot. Adjustment logic always re-reads the current balance under the write lock, rather than trusting the screen preview.
+- `financeReadRepository.ts`: joined `getTransactionViews`, compact `getAccountBalances`, and `getRecentDescriptions`. No schema migration was necessary. The last account ID is stored in existing metadata under `entry.last_account_id`.
+- `useLocalQuery` refreshes focused screen-local snapshots on commits, navigation focus, foreground resume and local midnight. Zustand holds a revision counter and feedback, not accounts/transactions/balances. History uses a paginated SectionList and independent screen-local query state.
+- Search is debounced and Unicode-aware; it scans only active IDs/descriptions, then loads the matching visible page's joined rows. It treats punctuation literally and includes a small trailing-name-vowel aid for `elona` → `elonen`. It is not a general Albanian morphological search engine. Large histories may later need a SQLite Unicode/FTS index; ordinary browsing is paginated now.
+- Dashboard totals exclude adjustments, while account/combined balances and history include them. Archived account money is still included and labeled on Home.
+
+## Repository verification and earlier-phase regression checks
 
 Use an isolated development database/device, with the repository API in a temporary development harness or debugger. Do not reset or uninstall a real user database.
 
@@ -66,4 +74,10 @@ Use an isolated development database/device, with the repository API in a tempor
 6. Verify 10, 20, 199, 5160 and 99999 cents format correctly on Hermes; confirm 10 + 20 = 30. Enter an impossible date, negative/zero/fractional transaction amount, missing description and invalid IDs: expect rejection without a row being inserted.
 7. Close/reopen the app; confirm financial records persist and October 1 remains October 1, including with a different device timezone.
 
-Automated equivalents run with `npm test` against actual SQLite and repository sources. Native UUID generation is substituted with Node Crypto in tests; on-device Expo Crypto and Expo SQLite still require the checks above.
+Automated equivalents run with `npm test` against actual file-backed SQLite and repository sources, including fresh transaction connections and database reopen. Native APIs are substituted in tests; use the current UI checklist in `PHASE3.md` for on-device verification.
+
+## Phase 4 reporting and filtering
+
+Migration 4 preserves earlier migrations and records, adds `description_search` with NFC/lowercase backfill, and adds `transactions_type_date_report(type, transaction_date)` for active normal transactions. Insert/edit maintain search text without changing the user-facing description. Search now combines bound escaped LIKE tokens with the other filters in SQLite; the Phase 3 JavaScript search scan has been replaced. Existing date/account/category active indexes continue excluding tombstones. EXPLAIN QUERY PLAN verifies the new index for expense type/date reports.
+
+`filterSql` validates type, UUIDs, calendar ranges, safe integer-cent bounds and search lengths before building SQL from trusted column names and bound values. `getTransactionViews` supports these filters plus pagination. Report aggregates use this filter builder and always exclude adjustments and tombstones. `statisticsRepository` supplies period/category/daily/monthly totals, largest transactions and category transaction pages. `services/statistics` reads a consistent snapshot using the existing dedicated transaction connection. Amount averages use exact BigInt division and return rounded safe integer cents. Percentage/change/chart ratios are display-only. See PHASE4.md for full semantics and on-device checks.

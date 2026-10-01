@@ -1,2 +1,2 @@
-export const currency = { code: 'EUR', locale: 'en-IE' } as const;
-export const databaseName = 'finance.db';
+export const currency = { code: "EUR", locale: "en-IE", symbol: "€" } as const;
+export const databaseName = "finance.db";
