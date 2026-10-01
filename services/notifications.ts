@@ -1,4 +1,5 @@
-import * as Notifications from 'expo-notifications';
+import type * as NotificationTypes from 'expo-notifications';
+import { isRunningInExpoGo } from 'expo';
 import { Linking, Platform } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { loadReminderSettings, saveReminderSettings } from '../database/repositories/reminderRepository';
@@ -14,12 +15,31 @@ function serialize<T>(operation: () => Promise<T>): Promise<T> {
   queue = result.catch(() => undefined);
   return result;
 }
-Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }) });
+export function getNotificationAvailabilityMessage(): string | null {
+  if (Platform.OS === 'web') return 'Notifications require Android or iOS.';
+  if (Platform.OS === 'android' && isRunningInExpoGo())
+    return 'Daily reminders require an Android development or installed app build with this Expo version. Finance features remain available in Expo Go.';
+  return null;
+}
+let notificationModule: Promise<typeof NotificationTypes> | null = null;
+async function getNotifications(): Promise<typeof NotificationTypes> {
+  const unavailable = getNotificationAvailabilityMessage();
+  if (unavailable) throw new Error(unavailable);
+  // SDK 57's public entry point initializes push-token listeners even for local
+  // reminders. Never evaluate it in Android Expo Go, or during route imports.
+  notificationModule ??= import('expo-notifications').then(module => {
+    module.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }) });
+    return module;
+  }).catch(error => { notificationModule = null; throw error; });
+  return notificationModule;
+}
 async function createChannel() {
+  const Notifications = await getNotifications();
   if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync(reminderChannel, { name: 'Finance Reminders', importance: Notifications.AndroidImportance.DEFAULT, sound: 'default', enableVibrate: false });
 }
 export async function getNotificationPermissionStatus(): Promise<NotificationPermissionState> {
-  if (Platform.OS === 'web') return 'unavailable';
+  if (getNotificationAvailabilityMessage()) return 'unavailable';
+  const Notifications = await getNotifications();
   const permission = await Notifications.getPermissionsAsync();
   if (Platform.OS === 'android' && permission.granted) {
     const channel = await Notifications.getNotificationChannelAsync(reminderChannel);
@@ -28,15 +48,17 @@ export async function getNotificationPermissionStatus(): Promise<NotificationPer
   return permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL ? 'granted' : permission.status;
 }
 export async function requestNotificationPermission(): Promise<NotificationPermissionState> {
+  if (getNotificationAvailabilityMessage()) return 'unavailable';
+  const Notifications = await getNotifications();
   await createChannel();
   const permission = await Notifications.getPermissionsAsync();
   if (permission.status === 'undetermined' && permission.canAskAgain) await Notifications.requestPermissionsAsync();
   return getNotificationPermissionStatus();
 }
-function isFinanceReminder(request: Notifications.NotificationRequest) {
+function isFinanceReminder(request: NotificationTypes.NotificationRequest) {
   return request.identifier === reminderIdentifier || request.content.data?.kind === reminderIdentifier;
 }
-function matches(request: Notifications.NotificationRequest, settings: FinanceReminderSettings) {
+function matches(request: NotificationTypes.NotificationRequest, settings: FinanceReminderSettings) {
   const trigger = request.trigger;
   if (!trigger || !('type' in trigger) || request.content.title !== title || request.content.body !== body) return false;
   if (trigger.type === 'daily') return trigger.hour === settings.hour && trigger.minute === settings.minute;
@@ -54,12 +76,15 @@ function matches(request: Notifications.NotificationRequest, settings: FinanceRe
   return false;
 }
 async function cancelExisting() {
+  const Notifications = await getNotifications();
   for (const request of (await Notifications.getAllScheduledNotificationsAsync()).filter(isFinanceReminder)) await Notifications.cancelScheduledNotificationAsync(request.identifier);
 }
 async function reconcile(settings: FinanceReminderSettings, prompt: boolean): Promise<ReminderState> {
   const state: ReminderState = { settings, permission: 'unavailable', status: 'Error', scheduledCount: null, error: null };
+  const unavailable = getNotificationAvailabilityMessage();
+  if (unavailable) return { ...state, status: 'Unavailable', error: unavailable };
   try {
-    if (Platform.OS === 'web') throw new Error('Notifications require Android or iOS');
+    const Notifications = await getNotifications();
     await createChannel();
     state.permission = prompt && settings.enabled ? await requestNotificationPermission() : await getNotificationPermissionStatus();
     let requests = (await Notifications.getAllScheduledNotificationsAsync()).filter(isFinanceReminder);
@@ -94,7 +119,10 @@ export function cancelDailyFinanceReminder(db: SQLiteDatabase) {
 }
 export function sendTestNotification() {
   return serialize(async () => {
-    if (Platform.OS === 'web' || await requestNotificationPermission() !== 'granted') throw new Error('Enable notifications in system settings first.');
+    const unavailable = getNotificationAvailabilityMessage();
+    if (unavailable) throw new Error(unavailable);
+    const Notifications = await getNotifications();
+    if (await requestNotificationPermission() !== 'granted') throw new Error('Enable notifications in system settings first.');
     await Notifications.scheduleNotificationAsync({ content: { title: 'Finance Reminder Test', body: 'Notifications are working correctly.' }, trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3, channelId: reminderChannel } });
   });
 }

@@ -27,6 +27,7 @@ const notifications = {
 };
 const original = Module._load;
 Module._load = function (name, ...args) {
+  if (name === 'expo') return { isRunningInExpoGo: () => false };
   if (name === 'expo-notifications') return notifications;
   if (name === 'react-native') return { Platform: { OS: 'android' }, Linking: { openSettings: async () => {} } };
   return original.call(this, name, ...args);

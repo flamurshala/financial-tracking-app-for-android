@@ -27,7 +27,7 @@ test("initialization is repeatable and preserves parameterized data", async () =
     );
     assert.equal(
       (await adapter.getAllAsync("SELECT * FROM schema_migrations")).length,
-      4,
+      5,
     );
     assert.equal(
       (await adapter.getFirstAsync("PRAGMA foreign_keys")).foreign_keys,
@@ -78,4 +78,3 @@ test("calendar dates reject impossible dates and preserve local date", () => {
   assert.equal(localCalendarDate(new Date(2026, 9, 1, 0, 5)), "2026-10-01");
   assert.equal(displayCalendarDate("2026-10-01"), "1 Oct 2026");
 });
-

@@ -3,7 +3,7 @@ export type NotificationPermissionState = 'granted' | 'denied' | 'undetermined' 
 export interface ReminderState {
   settings: FinanceReminderSettings;
   permission: NotificationPermissionState;
-  status: 'Scheduled' | 'Disabled' | 'Permission Required' | 'Error';
+  status: 'Scheduled' | 'Disabled' | 'Permission Required' | 'Error' | 'Unavailable';
   scheduledCount: number | null;
   error: string | null;
 }

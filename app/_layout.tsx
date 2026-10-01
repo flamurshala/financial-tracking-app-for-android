@@ -9,6 +9,7 @@ import { databaseName } from "../constants/config";
 import { initializeDatabase } from "../database/database";
 import { useTheme } from "../hooks/useTheme";
 import { ReminderLifecycle } from "../components/ReminderLifecycle";
+import { CloudLifecycle } from "../components/CloudLifecycle";
 export default function RootLayout() {
   const colors = useTheme();
   return (
@@ -33,6 +34,7 @@ export default function RootLayout() {
             useSuspense
           >
             <ReminderLifecycle />
+            <CloudLifecycle />
             <StatusBar
               style={colors.background === "#111820" ? "light" : "dark"}
             />

@@ -9,10 +9,18 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSQLiteContext } from "expo-sqlite";
 import { initializeNotifications, rescheduleDailyFinanceReminder, sendTestNotification, openNotificationSettings } from "../../services/notifications";
 import type { FinanceReminderSettings } from "../../types/reminder";
+import { useAuthStore } from "../../store/authStore";
+import { useSyncStore } from "../../store/syncStore";
+import { synchronize } from "../../services/sync";
+import { signOut } from "../../services/auth";
 export default function Settings() {
   const setTheme = useSettingsStore((state) => state.setTheme);
   const reminder = useSettingsStore(state => state.reminder);
   const reminderError = useSettingsStore(state => state.reminderError);
+  const session = useAuthStore(state => state.session);
+  const authReady = useAuthStore(state => state.ready);
+  const authError = useAuthStore(state => state.error);
+  const sync = useSyncStore();
   const db = useSQLiteContext();
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -60,11 +68,11 @@ export default function Settings() {
         {reminderError && <Body>{reminderError}</Body>}
         {reminder?.permission === 'denied' && <Body>Notifications are disabled for this app. Enable them in system settings to receive your daily finance reminder. Also check the Finance Reminders channel.</Body>}
         {reminder?.permission === 'undetermined' && <Body>Notification permission is required to receive reminders.</Body>}
-        {Platform.OS !== 'web' && <Button title="Open Settings" onPress={() => { void run(async () => { await openNotificationSettings(); }); }} />}
+        {Platform.OS !== 'web' && reminder?.permission !== 'unavailable' && <Button title="Open Settings" onPress={() => { void run(async () => { await openNotificationSettings(); }); }} />}
         <Button title="Refresh reminder status" disabled={busy} onPress={() => { void run(async () => { useSettingsStore.getState().setReminder(await initializeNotifications(db, true)); }); }} />
         {__DEV__ && <>
           <Body>Developer: verified daily schedules: {reminder?.scheduledCount ?? 'unknown'}</Body>
-          <Button title="Send Test Notification" disabled={busy || Platform.OS === 'web'} onPress={() => { void run(async () => { await sendTestNotification(); Alert.alert('Test scheduled', 'A test notification is scheduled for 3 seconds from now.'); }); }} />
+          <Button title="Send Test Notification" disabled={busy || !reminder || reminder.permission === 'unavailable'} onPress={() => { void run(async () => { await sendTestNotification(); Alert.alert('Test scheduled', 'A test notification is scheduled for 3 seconds from now.'); }); }} />
         </>}
       </Card>
       <SectionTitle>Preferences</SectionTitle>
@@ -79,18 +87,22 @@ export default function Settings() {
         <Button title="Dark appearance" onPress={() => setTheme("dark")} />
       </Card>
       <Card>
-        <Body>
-          Cloud configuration:{" "}
-          {isSupabaseConfigured ? "provided" : "not configured"}
-        </Body>
-        <Body>
-          Cloud backup and biometric locking are prepared for future
-          phases.
-        </Body>
-        <Button
-          title="Cloud account"
-          onPress={() => router.push("/(auth)/login")}
-        />
+        <SectionTitle>Cloud Sync</SectionTitle>
+        <Body>Account: {session?.user.email ?? 'Not signed in'}</Body>
+        <Body>Status: {sync.status}</Body>
+        <Body>Last Sync: {sync.lastSync ? new Date(sync.lastSync).toLocaleString() : 'Never'}</Body>
+        {sync.error && <Body>{sync.error}</Body>}
+        {authError && <Body>{authError}</Body>}
+        {!isSupabaseConfigured && <Body>Add the Supabase project URL and public key to .env to enable optional cloud sync.</Body>}
+        <Body>Signing out stops cloud sync and keeps all finances on this device. This local dataset stays bound to its first cloud account.</Body>
+        {session ? <>
+          <Button title={sync.status === 'Syncing' ? 'Syncing…' : 'Sync Now'} disabled={busy || sync.status === 'Syncing'} onPress={() => { void run(async () => { await synchronize(db); }); }} />
+          <Button title="Sign Out" disabled={busy} onPress={() => { void run(async () => { const message = await signOut(); if (message) Alert.alert('Signed out', message); }); }} />
+        </> : <Button title="Sign In" disabled={!authReady || busy} onPress={() => router.push('/(auth)/login')} />}
+        {__DEV__ && <>
+          <Body>Sync Debug: pending accounts {sync.pending.accounts}, categories {sync.pending.categories}, transactions {sync.pending.transactions}</Body>
+          <Body>Cloud user: {session?.user.id ?? 'none'}</Body>
+        </>}
       </Card>
     </Screen>
   );
