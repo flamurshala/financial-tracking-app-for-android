@@ -1,3 +1,101 @@
 import * as Notifications from 'expo-notifications';
-export async function getNotificationPermission() { return Notifications.getPermissionsAsync(); }
-// Permission requests and scheduling will be added with the reminder feature.
+import { Linking, Platform } from 'react-native';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { loadReminderSettings, saveReminderSettings } from '../database/repositories/reminderRepository';
+import type { FinanceReminderSettings, NotificationPermissionState, ReminderState } from '../types/reminder';
+export const reminderIdentifier = 'daily-finance-reminder';
+export const reminderChannel = 'finance-reminders';
+const title = 'Daily Finance Check';
+const body = "Don't forget to register today's expenses and income.";
+let queue: Promise<unknown> = Promise.resolve();
+// Serialize startup, foreground refresh and settings changes to avoid racing schedules.
+function serialize<T>(operation: () => Promise<T>): Promise<T> {
+  const result = queue.then(operation);
+  queue = result.catch(() => undefined);
+  return result;
+}
+Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }) });
+async function createChannel() {
+  if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync(reminderChannel, { name: 'Finance Reminders', importance: Notifications.AndroidImportance.DEFAULT, sound: 'default', enableVibrate: false });
+}
+export async function getNotificationPermissionStatus(): Promise<NotificationPermissionState> {
+  if (Platform.OS === 'web') return 'unavailable';
+  const permission = await Notifications.getPermissionsAsync();
+  if (Platform.OS === 'android' && permission.granted) {
+    const channel = await Notifications.getNotificationChannelAsync(reminderChannel);
+    if (channel?.importance === Notifications.AndroidImportance.NONE) return 'denied';
+  }
+  return permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL ? 'granted' : permission.status;
+}
+export async function requestNotificationPermission(): Promise<NotificationPermissionState> {
+  await createChannel();
+  const permission = await Notifications.getPermissionsAsync();
+  if (permission.status === 'undetermined' && permission.canAskAgain) await Notifications.requestPermissionsAsync();
+  return getNotificationPermissionStatus();
+}
+function isFinanceReminder(request: Notifications.NotificationRequest) {
+  return request.identifier === reminderIdentifier || request.content.data?.kind === reminderIdentifier;
+}
+function matches(request: Notifications.NotificationRequest, settings: FinanceReminderSettings) {
+  const trigger = request.trigger;
+  if (!trigger || !('type' in trigger) || request.content.title !== title || request.content.body !== body) return false;
+  if (trigger.type === 'daily') return trigger.hour === settings.hour && trigger.minute === settings.minute;
+  if (trigger.type === 'calendar') {
+    // Native iOS responses carry dateComponents; SDK 57's request union also
+    // permits the input representation with hour/minute at the top level.
+    if ('dateComponents' in trigger) {
+      const components = trigger.dateComponents;
+      return trigger.repeats && typeof components === 'object' && components !== null &&
+        'hour' in components && 'minute' in components &&
+        components.hour === settings.hour && components.minute === settings.minute;
+    }
+    return trigger.repeats === true && trigger.hour === settings.hour && trigger.minute === settings.minute;
+  }
+  return false;
+}
+async function cancelExisting() {
+  for (const request of (await Notifications.getAllScheduledNotificationsAsync()).filter(isFinanceReminder)) await Notifications.cancelScheduledNotificationAsync(request.identifier);
+}
+async function reconcile(settings: FinanceReminderSettings, prompt: boolean): Promise<ReminderState> {
+  const state: ReminderState = { settings, permission: 'unavailable', status: 'Error', scheduledCount: null, error: null };
+  try {
+    if (Platform.OS === 'web') throw new Error('Notifications require Android or iOS');
+    await createChannel();
+    state.permission = prompt && settings.enabled ? await requestNotificationPermission() : await getNotificationPermissionStatus();
+    let requests = (await Notifications.getAllScheduledNotificationsAsync()).filter(isFinanceReminder);
+    if (!settings.enabled || state.permission !== 'granted') {
+      await cancelExisting();
+      state.status = settings.enabled ? 'Permission Required' : 'Disabled';
+    } else {
+      if (requests.length !== 1 || !matches(requests[0], settings)) {
+        await cancelExisting();
+        await Notifications.scheduleNotificationAsync({ identifier: reminderIdentifier, content: { title, body, sound: 'default', data: { kind: reminderIdentifier } }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: settings.hour, minute: settings.minute, channelId: reminderChannel } });
+      }
+      state.status = 'Scheduled';
+    }
+    requests = (await Notifications.getAllScheduledNotificationsAsync()).filter(isFinanceReminder);
+    state.scheduledCount = requests.length;
+    if (requests.length !== (state.status === 'Scheduled' ? 1 : 0) || (state.status === 'Scheduled' && !matches(requests[0], settings))) throw new Error('Schedule verification failed');
+  } catch (error) {
+    state.status = 'Error';
+    state.error = Platform.OS === 'web' ? 'Notifications require Android or iOS.' : 'Unable to schedule reminder. Please retry.';
+    if (__DEV__) console.warn('Finance reminder', error);
+  }
+  return state;
+}
+export function initializeNotifications(db: SQLiteDatabase, prompt = false) {
+  return serialize(async () => reconcile(await loadReminderSettings(db), prompt));
+}
+export function rescheduleDailyFinanceReminder(db: SQLiteDatabase, settings: FinanceReminderSettings) {
+  return serialize(async () => { await saveReminderSettings(db, settings); return reconcile(settings, settings.enabled); });
+}
+export function cancelDailyFinanceReminder(db: SQLiteDatabase) {
+  return serialize(async () => { const settings = { ...await loadReminderSettings(db), enabled: false }; await saveReminderSettings(db, settings); return reconcile(settings, false); });
+}
+export function sendTestNotification() {
+  return serialize(async () => {
+    if (Platform.OS === 'web' || await requestNotificationPermission() !== 'granted') throw new Error('Enable notifications in system settings first.');
+    await Notifications.scheduleNotificationAsync({ content: { title: 'Finance Reminder Test', body: 'Notifications are working correctly.' }, trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3, channelId: reminderChannel } });
+  });
+}
+export const openNotificationSettings = () => Linking.openSettings();

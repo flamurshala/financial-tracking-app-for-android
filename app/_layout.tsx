@@ -8,6 +8,7 @@ import { AppErrorBoundary } from "../components/ui/AppErrorBoundary";
 import { databaseName } from "../constants/config";
 import { initializeDatabase } from "../database/database";
 import { useTheme } from "../hooks/useTheme";
+import { ReminderLifecycle } from "../components/ReminderLifecycle";
 export default function RootLayout() {
   const colors = useTheme();
   return (
@@ -31,6 +32,7 @@ export default function RootLayout() {
             onInit={initializeDatabase}
             useSuspense
           >
+            <ReminderLifecycle />
             <StatusBar
               style={colors.background === "#111820" ? "light" : "dark"}
             />
