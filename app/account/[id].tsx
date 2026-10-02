@@ -15,6 +15,8 @@ import { Notice } from "../../components/ui/Notice";
 import { AccountForm } from "../../components/finance/AccountForm";
 import {
   archiveAccount,
+  restoreAccount,
+  getAccounts,
   getAccountById,
   getAccountBalance,
 } from "../../database/repositories/accountRepository";
@@ -34,7 +36,11 @@ export default function AccountDetail() {
   const loader = useCallback(async () => {
     const account = await getAccountById(db, id);
     return account
-      ? { account, balance: await getAccountBalance(db, id) }
+      ? {
+          account,
+          balance: await getAccountBalance(db, id),
+          activeCount: (await getAccounts(db)).length,
+        }
       : null;
   }, [db, id]);
   const query = useLocalQuery(loader);
@@ -43,8 +49,13 @@ export default function AccountDetail() {
     busy.current = true;
     setPending(true);
     try {
-      await archiveAccount(db, id);
-      invalidate("Account archived");
+      if (query.data?.account.is_archived) await restoreAccount(db, id);
+      else await archiveAccount(db, id);
+      invalidate(
+        query.data?.account.is_archived
+          ? "Account restored"
+          : "Account archived",
+      );
       if (!isMounted()) return;
       if (router.canGoBack()) router.back();
       else router.replace("/(tabs)/accounts");
@@ -122,7 +133,9 @@ export default function AccountDetail() {
                 onPress={() =>
                   Alert.alert(
                     "Archive account?",
-                    "This account will be hidden from new-entry choices. Its balance remains in your total, and its transaction history is retained.",
+                    query.data?.activeCount === 1
+                      ? "This is your last active account. Archiving it stops new transaction entry until you create or restore an account. Its balance and history remain intact. Continue?"
+                      : "This account will be hidden from new-entry choices. Its balance remains in your total, and its transaction history is retained.",
                     [
                       { text: "Cancel", style: "cancel" },
                       { text: "Archive", onPress: () => void archive() },
@@ -132,10 +145,17 @@ export default function AccountDetail() {
               />
             </>
           ) : (
-            <Body>
-              Archived accounts retain their balance and history. New
-              transactions and balance adjustments cannot use this account.
-            </Body>
+            <>
+              <Button
+                title="Restore account"
+                disabled={pending}
+                onPress={() => void archive()}
+              />
+              <Body>
+                Archived accounts retain their balance and history. New
+                transactions and balance adjustments cannot use this account.
+              </Body>
+            </>
           )}
         </>
       )}

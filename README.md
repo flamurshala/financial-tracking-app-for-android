@@ -1,6 +1,6 @@
-# Personal finance · Phase 6
+# Personal finance · Phase 7
 
-A personal Android-first finance app with a shared React Native codebase for future iOS release. Daily transaction entry, searchable history, editing/deletion, account management, auditable balance adjustments and the Home dashboard now use the existing local database. SQLite remains authoritative. Day/week/month/year/custom statistics, category drilldowns and combined transaction filters are implemented. Local daily reminders are implemented. Authentication and offline-first Supabase synchronization are implemented. Biometric locking and exports remain for future phases.
+A personal Android-first finance app with a shared React Native codebase for future iOS release. Daily transaction entry, searchable history, editing/deletion, account management, auditable balance adjustments and the Home dashboard now use the existing local database. SQLite remains authoritative. Day/week/month/year/custom statistics, category drilldowns and combined transaction filters are implemented. Local daily reminders are implemented. Authentication and offline-first Supabase synchronization are implemented. Optional local biometric App Lock, persistent theme, category management and account restoration are implemented. Exports remain for a future phase.
 
 ## Stack
 
@@ -120,6 +120,15 @@ Email/password login and offline-first cloud sync are now implemented. SQLite re
 3. Enable email/password authentication; create your personal confirmed user in Authentication → Users.
 4. Copy the Project URL and public publishable/anon key from Connect or Settings → API Keys. Put them in `.env` as `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Never use a secret/service-role key.
 5. Run `npm install`, then restart with `npx expo start --clear` and sign in from Settings → Cloud Sync.
-6. Follow [PHASE6.md](PHASE6.md) for exact dashboard instructions, architecture/conflict limitations, RLS testing, restore, logout/owner safeguards and the physical-device acceptance checklist. Do not begin Phase 7 until those manual tests pass.
+6. Follow [PHASE6.md](PHASE6.md) for exact dashboard instructions, architecture/conflict limitations, RLS testing, restore, logout/owner safeguards and the physical-device acceptance checklist. Use those manual tests to verify the existing cloud setup before release.
 
 The new mobile dependency is Expo-compatible NetInfo. Existing SDK-compatible Expo Go can test authentication/sync; rebuild a custom development client after adding NetInfo. An installed release build is needed to meaningfully test fully closed offline startup without Metro. Supabase credentials and internet are optional for local finance/reminders. Automated tests include real file-backed SQLite, mocked auth/transport and embedded PostgreSQL execution of the actual schema/RLS; live Supabase and phone testing are still required.
+
+
+## App Lock setup and privacy (Phase 7)
+
+Open Settings → Security, enable App Lock and successfully verify enrolled device biometrics. Default Lock After is one minute; Immediately, five and fifteen minutes are also available. Cold starts always lock. Shorter background trips retain the unlocked session; longer trips require Unlock. Disabling or changing an enabled timeout requires identity verification. All finance routes, notification launches and deep links share the root lock gate.
+
+App Lock is device-local and works offline. **Supabase authentication and local App Lock are separate**: cloud sign-out keeps the local database and does not disable App Lock. The setting/timeout policy is in SecureStore; normal theme preference is in SQLite. A custom app PIN was intentionally omitted; the supported OS device-passcode fallback handles recovery/retry protection. No plaintext app PIN is stored.
+
+`expo-screen-capture` provides supported capture/recents protection while App Lock is enabled; protection failures are reported in the app. This UI lock does not encrypt SQLite or protect compromised devices/extracted files. On Android, verify biometrics and recents on an enrolled physical device; use a rebuilt development client for full local-reminder testing. For iOS rebuild with the configured Face ID permission description; Face ID requires a development/release build rather than Expo Go. Follow [PHASE7.md](PHASE7.md) for architecture, limitations and the full Android/iOS security, notification, management and sync checklist.

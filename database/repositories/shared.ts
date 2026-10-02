@@ -57,3 +57,16 @@ export async function archiveRecord(
   );
   if (result.changes === 0) throw new Error("Record not found");
 }
+export async function restoreRecord(
+  db: SQLiteDatabase,
+  table: "accounts" | "categories",
+  id: string,
+) {
+  validateId(id);
+  const result = await db.runAsync(
+    `UPDATE ${table} SET is_archived = 0, updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL`,
+    new Date().toISOString(),
+    id,
+  );
+  if (!result.changes) throw new Error("Record not found");
+}

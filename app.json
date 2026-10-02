@@ -26,7 +26,12 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
-      "expo-local-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Finance to use Face ID to protect your financial information."
+        }
+      ],
       "expo-notifications"
     ]
   }

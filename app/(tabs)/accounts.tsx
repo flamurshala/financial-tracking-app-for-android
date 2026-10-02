@@ -45,6 +45,7 @@ export default function Accounts() {
             {account.is_archived ? " · Archived" : ""}
           </SectionTitle>
           <SectionTitle>{formatAmount(account.balance_cents)}</SectionTitle>
+          <Body>Type: {account.type}</Body>
           <Body>
             Initial: {formatAmount(account.initial_balance_cents)} ·{" "}
             {account.currency}
