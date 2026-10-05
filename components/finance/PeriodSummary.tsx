@@ -6,10 +6,12 @@ export function PeriodSummary({
   title,
   totals,
   today = false,
+  hidden = false,
 }: {
   title: string;
   totals: { income: number; expenses: number; net: number };
   today?: boolean;
+  hidden?: boolean;
 }) {
   const colors = useTheme();
   return (
@@ -42,7 +44,7 @@ export function PeriodSummary({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {formatAmount(row.amount)}
+            {hidden ? "••••" : formatAmount(row.amount)}
           </Text>
         </View>
       ))}

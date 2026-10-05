@@ -1,134 +1,126 @@
-# Personal finance · Phase 7
+# Finance
 
-A personal Android-first finance app with a shared React Native codebase for future iOS release. Daily transaction entry, searchable history, editing/deletion, account management, auditable balance adjustments and the Home dashboard now use the existing local database. SQLite remains authoritative. Day/week/month/year/custom statistics, category drilldowns and combined transaction filters are implemented. Local daily reminders are implemented. Authentication and offline-first Supabase synchronization are implemented. Optional local biometric App Lock, persistent theme, category management and account restoration are implemented. Exports remain for a future phase.
+An offline-first personal finance app for Android, built with React Native 0.86, Expo SDK 57, strict TypeScript, Expo Router, SQLite, Zustand UI state, React Hook Form/Zod and optional Supabase synchronization. It tracks EUR accounts, income, expenses, categories, auditable balance adjustments and calendar-based statistics. Local reminders, biometric App Lock, dark mode and manual CSV/JSON exports are included.
 
-## Stack
+## Current release status
 
-Expo SDK 57, React Native, strict TypeScript, Expo Router, Expo SQLite, Supabase, Zustand, React Hook Form, Zod/resolvers, SecureStore, LocalAuthentication, Notifications and date-fns. Expo Crypto supplies native UUID generation; the community DateTimePicker supplies native Android/iOS date selection. Native dependencies use Expo-compatible versions. The package lock records installed versions.
+**Not ready because the installed-phone and live-cloud acceptance checks remain outstanding.** Automated checks cover financial behavior and local migrations, but they do not prove the installed APK, native sharing, biometric/privacy behavior, notification delivery or deployed Supabase RLS. See [PHASE8.md](PHASE8.md) for measured results, dependency advisories and the exact acceptance checklist. No Google Play submission or paid EAS build was performed.
 
-## Prerequisites and installation
+## Architecture and offline operation
 
-Install Node.js 24 LTS with npm on Windows. Install Android Studio, its Android SDK/platform tools and an Android Virtual Device for emulator testing. Enable hardware virtualization. iOS simulator/build development requires macOS or a hosted build service.
+UI → repository/service → SQLite → sync engine → authenticated Supabase.
+
+SQLite `finance.db` remains the local source of truth. Save/edit/archive/delete commits locally before sync; connection failure leaves records pending. Zustand holds UI preferences/status and filter state, not a replacement financial database. SQLite WAL, foreign keys, dedicated write transactions and consistent read snapshots protect local operations. Migrations 1–5 run in order inside a transaction, preserve existing data and reject a newer or nonsequential migration history. This phase adds no financial-data migration. Never clear a real database to fix an upgrade failure.
+
+Accounts contain an initial balance in cents. Transactions reference accounts and historical categories; income adds and expense subtracts. Balance adjustments are ordinary signed income/expense records with an adjustment flag, appear in history/CSV/balances, and are excluded from spending statistics. Soft deletion sets `deleted_at` and sync pending rather than physically removing history. Archived accounts retain their money and history in combined ownership balances; archived categories remain attached to old transactions but are unavailable for new entries. Account/category restoration preserves identifiers.
+
+All canonical money is safe integer cents. Parsing uses integer/BigInt arithmetic: `1`, `1.5`, `1.50`, `0.5`, `30`, `51.60`, `200` and ungrouped European `1,50` are accepted. Ambiguous thousands separators, signs in ordinary positive entry, more than two decimals, malformed input and unsafe values are rejected. Signed initial-balance/adjustment fields use their explicit signed parser. Financial sums and averages use integers; rounding affects only display/chart percentages. SQL integer SUM is never replaced with floating-point TOTAL. Overflow fails with an error rather than a rounded balance. Extremely large ledgers can exceed SQLite's signed 64-bit SUM limit and are rejected, not silently approximated.
+
+Financial dates are local calendar `YYYY-MM-DD`, separate from UTC created/updated timestamps. Weeks start Monday, ranges include both endpoints, and month/year/leap boundaries are validated. Amount hiding on Home persists in SQLite and hides dashboard totals, summaries and recent-row amounts/accessibility labels; it is a display preference, separate from App Lock. Other finance screens remain available when unlocked.
+
+## Setup and commands
+
+Use Node 24 or a compatible Node version with `node:sqlite` for tests, npm, and a current Expo-supported Android toolchain. From PowerShell:
 
 ```powershell
-cd "C:\Users\flamu\Desktop\financial-tracking-app-for-android"
+Set-Location 'C:\Users\Flamur Shala\Desktop\financial tracking app'
 npm install
-Copy-Item .env.example .env
 npm start
-```
-
-The environment file is optional for local startup. Configure only public client values when cloud features are needed:
-
-```dotenv
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
-```
-
-Never put service-role keys in the application. Expo public variables are bundled and visible to clients. `.env` and its variants are ignored; `.env.example` contains no credentials. The lazy client lives in `services/supabase.ts`, with a chunked SecureStore session adapter. Phase 6 wires session restoration, auth events and foreground/background token refresh lifecycle.
-
-## Run on Android
-
-Start an Android Studio emulator through Device Manager, wait for its home screen, then run:
-
-```powershell
-npm run android
-```
-
-Ensure `ANDROID_HOME` points at the SDK (typically `%LOCALAPPDATA%\Android\Sdk`) and `platform-tools` is on PATH. Expo opens the app in a compatible Expo Go installation. For a physical Android phone, install Expo Go compatible with SDK 57, connect to the same network as the computer, run `npm start`, and scan the QR code. If Expo Go does not support the SDK available on your phone, use a compatible version from Expo's official download page or an Expo development build. Biometric and notification behavior requires device/development-build verification when those features are implemented.
-
-## Structure
-
-- `app/`: Home dashboard, Transactions history/search, Accounts management, transaction details/entry and account detail/create/adjust routes. Statistics includes reports and category detail routes; cloud-account routes provide email/password sign-in.
-- `components/ui/`, `components/finance/`: reusable presentation components.
-- `constants/`, `hooks/`, `types/`, `utils/`: theme, currency, typed form pattern, calendar-date utilities and safe diagnostics.
-- `database/`: initialization, ordered migrations, schema types and parameterized repositories.
-- `services/`: local finance workflows and dashboard snapshots, Supabase, secure session storage, future sync boundary, local reminders, cloud sync and biometric capability inspection.
-- `store/`: separate auth, finance UI and settings stores. Financial records belong in SQLite, not Zustand.
-- `assets/`: Expo template icons; replace with final branding later.
-- `tests/`: meaningful SQLite migration and date regression checks using Node's SQLite adapter.
-
-## Local database architecture
-
-`SQLiteProvider` opens `finance.db` and awaits initialization before rendering routes. WAL and foreign keys are enabled. An exclusive transaction creates the migration ledger and applies pending numbered migrations atomically. Version 1 remains unchanged; version 2 adds finance tables and indexes; version 3 seeds categories; version 4 adds reporting/search support; version 5 adds sync revisions/server versions. Append migrations with sequential versions; do not modify shipped migrations, seed order or delete user databases. SQL identifiers/statements are trusted code; all external values use bound parameters. Unexpected newer schemas fail safely. Startup errors reach the app error boundary and allow retry without deleting data. See [DATABASE.md](DATABASE.md) for the schema, API and manual repository checks.
-
-UI → local repositories → sync service → Supabase is the intended data flow. Supabase credentials and network access are not needed to open the local app. Sync remains optional and disabled without configuration/sign-in; configured sessions synchronize asynchronously after local saves.
-
-Amounts use EUR configuration and integer minor units. Calendar dates remain validated `YYYY-MM-DD` strings; timestamps are reserved for events such as migration application. Do not use UTC conversions for transaction calendar dates. Appearance follows the device by default; light/dark choices are session-only for now. `useValidatedForm` demonstrates Zod plus React Hook Form for schemas without transforms/coercion; forms that transform input should explicitly specify their input and output types.
-
-## Checks and current status
-
-```powershell
 npm run typecheck
 npm run lint
 npm test
-npx expo install --check
-npx expo export --platform android
 ```
 
-Phase 4 reporting and filtering functionality is implemented. Android bundle export verifies compilation, but does not prove native runtime behavior. Tests use real file-backed desktop SQLite through an Expo-shaped adapter, substitute native UUID generation with Node Crypto, and close/reopen the database for persistence checks. They do not replace testing Expo SQLite and UI interactions on Android. See `VALIDATION.md`, [PHASE4.md](PHASE4.md) and [PHASE3.md](PHASE3.md) for results and the device checklist.
+For an installed development client:
 
-## Manual checks before the next phase
+```powershell
+npx expo start --dev-client
+```
 
-1. Launch on emulator and physical Android. Home should appear after database initialization, with no error screen.
-2. Visit all five tabs; open Add transaction, return with Android back, and open Cloud account from Settings.
-3. Tap a saved transaction in history and verify its details and Edit action. For deep-link testing in an installed build, use `finance://transaction/<actual-record-UUID>` (Expo Go uses its own development URL).
-4. Force-close and reopen. Confirm the database remains available; repeat startup in airplane mode with no Supabase variables.
-5. Check device/light/dark appearance, large system font sizes, narrow screen layouts, keyboard dismissal when future forms arrive, and Android back behavior.
-6. Verify the database has migration versions 1–5 and exactly 25 default categories. Restart without reinstalling; confirm no duplicate categories and existing records/metadata remain.
-7. Follow the complete UI workflow in `PHASE3.md`: transaction entry, Save & Add Another, account creation/edit/archive, confirmed deletion, balance adjustment, search and restart persistence.
-8. Follow PHASE4.md for report/filter checks. Cloud login is implemented in Phase 6; locking remains for a future phase. See the Phase 5 reminder checklist below.
+Local native compilation requires Android Studio/SDK, Java and an emulator or connected device:
 
-No notification permission prompt is shown on startup; reminder Settings requests it on first appropriate use. Financial records remain in SQLite; no record cache is duplicated in Zustand. The local SQLite file uses the application's storage sandbox and is not encrypted; SecureStore is reserved for session/security values.
+```powershell
+npx expo run:android
+```
 
+This generates the ignored Android project, compiles it locally and installs the development build. EAS builds use hosted builders instead and do not require your own Android compiler. A preview APK runs independently of Metro; a development-client APK expects the development server.
 
-## Phase 5: offline daily finance reminder
+Android Expo Go intentionally reports reminders unavailable instead of importing an unsupported native notification module. Use an installed development/preview build for complete tests. Previous emulator verification encountered an Expo Go loader failure before the JS bundle loaded; that is not an app runtime pass. Rebuild the client after native dependency/configuration changes.
 
-Settings → Finance Reminder defaults to ON at **22:00 local device time**. The switch records your preference; Permission and Status separately report OS authorization and the verified pending schedule. First opening this section requests permission only when the OS reports `undetermined` and allows asking. Denials do not trigger repeated prompts. Open Settings uses React Native's supported `Linking.openSettings()` to open app system settings (in Expo Go these belong to Expo Go). Check both app notification permission and the Finance Reminders channel. Returning to the app refreshes permission and reconciles the schedule.
+## Supabase setup, RLS and ownership
 
-`services/notifications.ts` owns channel creation, permission, scheduling, cancellation and development test delivery. `components/ReminderLifecycle.tsx` reconciles once after SQLite initialization and whenever the app returns to the foreground. `store/settingsStore.ts` holds UI status; `database/repositories/reminderRepository.ts` persists `reminder_enabled`, `reminder_hour`, and `reminder_minute` atomically in the existing `app_metadata` table. No new storage dependency, database migration, cloud service, token registration or background worker is needed.
+Cloud is optional; leave public variables unset for local-only finance. To enable it:
 
-Duplicate prevention: a single service promise queue serializes startup, foreground refresh and settings changes. Scheduled requests are identified by the stable `daily-finance-reminder` identifier or the same `content.data.kind` marker. An already correct single request is retained. Otherwise all matching requests are canceled, exactly one daily request is scheduled, and the pending list is read again to verify the time and count. OFF or missing permission cancels matching requests and verifies zero. Other notifications are preserved. Saved preferences remain available when scheduling fails; Settings shows Error and provides a refresh/retry action. The development count is read from Expo's pending list, not calculated from preferences. No estimated next-delivery time is displayed.
+1. Create a Supabase project and enable email/password authentication. Create/confirm your user account through Supabase; the app provides sign-in, not a registration flow.
+2. In a **fresh project**, execute the complete [supabase/schema.sql](supabase/schema.sql) using Dashboard → SQL Editor. This installs tables, owner-bound composite foreign keys, constraints, RLS policies, server-stamped versions, triggers and `finance_sync_cursor`. The script creates objects and is not an idempotent upgrade script: do not rerun it blindly in an existing populated project.
+3. Copy `.env.example` to `.env` only if you have not already configured `.env`. Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` to your project URL and public publishable/anon key. Never put a service-role/secret key or user password in source or public variables. Existing `.env` was preserved.
+4. Restart Metro after environment changes; native embedded builds must be rebuilt to change their public bundle configuration.
+5. Sign in, Sync Now, and verify the rows and last-sync status. Run [supabase/rls-check.sql](supabase/rls-check.sql) after replacing its A/B/account UUID placeholders. Its test writes roll back. Independently confirm User A cannot SELECT/UPDATE/DELETE User B rows or INSERT as B. The checked-in SQL passes embedded PostgreSQL tests; your deployed project's policies and grants must still be checked.
 
-Android channel: `finance-reminders`, name `Finance Reminders`, DEFAULT importance, standard sound and no custom vibration. The existing `expo-notifications` config plugin is retained. No exact-alarm permission is added: approximate daily delivery is appropriate here. Foreground presentation uses the current `shouldShowBanner`/`shouldShowList` handler fields, without foreground sound or badges. Android channel settings remain under the user's control.
+RLS enables independent server enforcement; UI restrictions alone are insufficient. Local dataset ownership is bound to its first synchronizing account through `local_owner_user_id`. Signing in as another user must block sync instead of cross-uploading data. Sign-out stops synchronization and removes this device's saved session; it keeps local finances, dataset ownership and App Lock policy. There is no separate local user-profile switch.
 
-Scheduling uses Expo's DAILY trigger with hour/minute, not an 86,400-second interval or fixed UTC timestamp. The installed SDK maps this to a repeating calendar trigger on iOS. It follows normal native timezone/DST behavior; test travel/timezone changes on the target device, particularly while the app remains closed. Android's installed Expo scheduler uses an inexact idle-capable alarm when exact alarms are unavailable, so delivery can be delayed by Doze/battery restrictions. The library includes its own BOOT_COMPLETED receiver and restores saved requests after reboot; no custom reboot service is added. Reboot delivery has not been tested on hardware here. Android force-stop may prevent alarms until the app is opened again. A pending schedule confirms registration, not guaranteed delivery. Conditional transaction-based reminders are deliberately deferred.
+Sync uploads bounded pending batches, uses UUID identity, protects newer in-flight local revisions and pulls changes through a server cursor. References and cursor are merged transactionally. Network/validation failure cannot clear local finance tables. Only explicit tombstones represent deletion. **Empty new-device SQLite + populated cloud = restore; it never means delete cloud data.** New installs may show built-in categories while restore runs; verify sync status before treating empty balances as final. First large restores gather remote pages before the atomic merge, so peak memory still grows with restore size; 110,000-row native restore has not been benchmarked.
 
-Notification taps open the app normally. Use Home → Add Transaction. No new deep-link observer is installed. All existing transaction, account, balance, filtering and statistics workflows remain intact.
+On device A create/sync data, then install on B with empty SQLite and sign in as the same user without recreating accounts. Compare balances/statistics/UUID counts, create an entry on B, sync and verify it reaches A. Repeat sync and ensure no duplicates. Do not uninstall or clear device A's real database to create the fresh B fixture.
 
-### Expo Go and physical Android checklist
+## Notifications and App Lock
 
-[Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/sdk/notifications/) describes local notification support in Expo Go, but the installed `expo-notifications` 57.0.21 public entry point initializes push-token registration and throws in Android Expo Go. The app therefore detects that runtime before loading the package. Expo Go remains usable for finance/auth/sync; reminder Settings shows Unavailable and explains that an Android development or installed app build is required. Use an installed build for all reminder tests below. No remote push or push credentials are used.
+Settings → Notifications controls one daily local reminder (22:00 default), time, permission and status. Reconciliation replaces stale schedules and prevents duplicates. Messages contain no financial balances. Enable notification permission and the Finance Reminders channel; device battery/Do Not Disturb policies can affect delivery. Schedule two minutes ahead and observe exactly one notification in an installed build, then test disable/re-enable, restart, changed time and lock interaction. The development test button schedules a separate three-second test notification.
 
-1. From this project directory run `npm install` if needed. With Android SDK/JDK configured and a phone connected over USB with USB debugging, run `npx expo run:android --device` to install and launch the debug app. For finance-only Expo Go testing, run `npx expo start --go --clear` and scan the QR code; reminder delivery is unavailable in Android Expo Go with this installed notification version.
-2. Open Settings → Finance Reminder and allow notifications. Expect ON, 22:00, Permission granted, Status Scheduled, and **Developer: verified daily schedules: 1**. In a separate fresh install/data reset test, deny permission: expect Permission Required, count 0, no crash and an explanation. Do not erase your existing finance data to simulate a fresh install; use a separate test installation.
-3. Press **Send Test Notification**. Within about three seconds expect `Finance Reminder Test` / `Notifications are working correctly.` Try with the app foreground and background/phone locked. The button and count are development-only. A successful scheduling confirmation does not itself prove delivery.
-4. Tap Reminder Time and choose any time 2–3 minutes ahead using the native time picker. Expect the new HH:mm, Scheduled and count 1. Background the app and wait. Repeat with a different future time; verify no alert arrives at the previous time. Use Refresh reminder status to query the real pending list again.
-5. Switch OFF: expect Disabled and count 0; confirm no daily alert at the former time. Switch ON: expect one schedule at the saved time. Close/reopen repeatedly and press Refresh: count must remain 1. Time and switch must persist after restart.
-6. Tap a daily notification and confirm the app opens, then use Home → Add Transaction. Check an existing account balance, create an income/expense, inspect history/filter/statistics and verify existing finance behavior.
-7. For hardware reboot acceptance, set a future time, reboot the installed app's phone and wait after unlocking. Test airplane mode, device timezone changes and normal battery optimization. Record device/Android version, permission/channel settings and actual arrival time. Restore 22:00 when finished.
-8. For an independent installed native build with Android SDK/JDK configured and the physical phone connected over USB with USB debugging enabled, run `npx expo run:android --device`. This creates the native project and installs a debug app. For accurate release-launch testing use `npx expo run:android --device --variant release`. An installed Android app is required for reminder testing with this installed notification package; the test button is hidden in release builds.
+Settings → Security enables App Lock only after successful enrolled-biometric verification. Unlock supports the OS device-credential fallback. No custom PIN is stored. Policy is in SecureStore; it works offline and independently of cloud sign-in. Cold start always requires unlock when enabled. Background timeout choices are immediate, one, five or fifteen minutes. All routes/deep links/notification launches share the root gate; unresolved/locked content is not exposed to touch or accessibility. Capture/recents protection is requested using the platform API and errors are shown.
 
-Automated coverage: `tests/reminder.test.cjs` mocks native notifications while using the real service and file-backed SQLite. It covers permission granted/denied, ten concurrent startup reconciliations, duplicate cleanup, time change, OFF/ON, database reopen, scheduling failure/recovery and the three-second test request. These tests do not prove native notification delivery. Physical-device, reboot and future iOS runtime tests remain manual.
+App Lock is a UI gate, **not SQLite encryption** or protection against a compromised OS/rooted device/extracted files. Device-level screen lock and storage protection remain important. Biometrics, OS fallback, cancellation, cold start, deep links, recents and background return need physical-device tests. Web is not the supported secure finance target.
 
+## CSV and local backup exports
 
-## Supabase Setup (Phase 6)
+Settings → Data → Export Data offers all transactions, this month, this year or inclusive custom dates. History → Export matching transactions captures the currently entered search plus filters and exports **every matching row**, not just the visible 50. A selected adjustment-exclusion filter is respected; ordinary all/month/year/custom exports include adjustments. Deleted transactions are excluded; archived account/category names remain historical.
 
-Email/password login and offline-first cloud sync are now implemented. SQLite remains the primary data source; ordinary finance screens continue to work offline. Setup uses only a public Supabase key, owner-scoped RLS, and no cloud notification service.
+CSV has Date, Type, Amount, EUR currency, Description, Category, Account, Is Balance Adjustment, Created At and Updated At columns. Amount `5160` cents becomes `51.60`, always dot-decimal. UTF-8 BOM supports spreadsheet Unicode detection; quoted cells escape double quotes and preserve commas, line breaks, apostrophes and Albanian characters. Untrusted text starting with spreadsheet-formula characters receives a leading apostrophe; the stored description is unchanged. Import as UTF-8, comma-separated with decimal dot if your spreadsheet's European locale defaults to semicolons. Sort by the date column as needed: export rows use stable UUID ordering for fast keyset pagination.
 
-1. Create a fresh project in the [Supabase dashboard](https://supabase.com/dashboard).
-2. Open SQL Editor and run [supabase/schema.sql](supabase/schema.sql).
-3. Enable email/password authentication; create your personal confirmed user in Authentication → Users.
-4. Copy the Project URL and public publishable/anon key from Connect or Settings → API Keys. Put them in `.env` as `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Never use a secret/service-role key.
-5. Run `npm install`, then restart with `npx expo start --clear` and sign in from Settings → Cloud Sync.
-6. Follow [PHASE6.md](PHASE6.md) for exact dashboard instructions, architecture/conflict limitations, RLS testing, restore, logout/owner safeguards and the physical-device acceptance checklist. Use those manual tests to verify the existing cloud setup before release.
+JSON backup is manual export-only: all finance records, including archive/deletion state, schema/format version, export time and whitelisted display/reminder preferences. Amounts remain integer cents. Authentication/session tokens, arbitrary metadata, local cloud-owner ID, App Lock policy and SecureStore material are excluded. There is no JSON import/restore feature; cloud restore remains the supported automated restore path.
 
-The new mobile dependency is Expo-compatible NetInfo. Existing SDK-compatible Expo Go can test authentication/sync; rebuild a custom development client after adding NetInfo. An installed release build is needed to meaningfully test fully closed offline startup without Metro. Supabase credentials and internet are optional for local finance/reminders. Automated tests include real file-backed SQLite, mocked auth/transport and embedded PostgreSQL execution of the actual schema/RLS; live Supabase and phone testing are still required.
+Both exports use a dedicated read-only SQLite snapshot, 500-row batches, private Expo cache files and Expo Sharing. File names contain scope/date, timestamp and UUID with safe characters. No automatic upload occurs. The sharing sheet lets you choose another app/save destination; opening it does not prove that the file was saved, and cancellation has no success assertion. Failed/interrupted file preparation removes its partial file. Background/lock/unmount during preparation blocks sharing at checkpoints.
 
+Export files are plaintext financial copies. They remain in private temporary cache until OS cleanup or a later export removes files older than 24 hours; cleanup is not a timer. OS sharing grants recipient apps read access and recipient copies are outside Finance's control. The current Android sharing implementation also grants URI access to chooser-resolvable packages during sheet creation; use trusted installed apps. Device tests must verify Unicode, attachment completion, cancellation, large exports and App Lock return behavior.
 
-## App Lock setup and privacy (Phase 7)
+## Android and EAS builds
 
-Open Settings → Security, enable App Lock and successfully verify enrolled device biometrics. Default Lock After is one minute; Immediately, five and fifteen minutes are also available. Cold starts always lock. Shorter background trips retain the unlocked session; longer trips require Unlock. Disabling or changing an enabled timeout requires identity verification. All finance routes, notification launches and deep links share the root lock gate.
+`app.json` keeps Finance, slug finance-foundation and version 1.0.0. Android package is `com.flamurshala.financetracker`, initial versionCode 1; future iOS bundle identifier uses the same value. Choose any rename before distribution and then keep the package/signing identity stable. Icons remain placeholders. Source configuration blocks external-storage, contacts, camera, microphone and location permissions; private-cache export does not require broad storage access. Notifications/biometrics/network remain relevant. Verify final merged manifest permissions after compilation; development tooling may include overlay permission.
 
-App Lock is device-local and works offline. **Supabase authentication and local App Lock are separate**: cloud sign-out keeps the local database and does not disable App Lock. The setting/timeout policy is in SecureStore; normal theme preference is in SQLite. A custom app PIN was intentionally omitted; the supported OS device-passcode fallback handles recovery/retry protection. No plaintext app PIN is stored.
+[eas.json](eas.json) selects explicit EAS environments and artifact types:
 
-`expo-screen-capture` provides supported capture/recents protection while App Lock is enabled; protection failures are reported in the app. This UI lock does not encrypt SQLite or protect compromised devices/extracted files. On Android, verify biometrics and recents on an enrolled physical device; use a rebuilt development client for full local-reminder testing. For iOS rebuild with the configured Face ID permission description; Face ID requires a development/release build rather than Expo Go. Follow [PHASE7.md](PHASE7.md) for architecture, limitations and the full Android/iOS security, notification, management and sync checklist.
+| Profile | Environment | Artifact | Use |
+| --- | --- | --- | --- |
+| development | development | APK, development client | Native debugging with Metro |
+| preview | preview | APK, internal distribution | Installable personal acceptance build |
+| production | production | AAB | Future store distribution |
+
+Initialize/link your Expo account and project yourself, retain the generated project ID in app config, and configure signing credentials:
+
+```powershell
+npx eas-cli@latest login
+npx eas-cli@latest init
+npx eas-cli@latest build --profile development --platform android
+npx eas-cli@latest build --profile preview --platform android
+npx eas-cli@latest build --profile production --platform android
+```
+
+Download/install the preview APK on your phone (allow installation from the chosen trusted source), then run the checklist before real financial use. Keep the same signing keystore for upgrades and retain recovery access to the EAS/Expo account. No build or Play submission is triggered by checking in this configuration. An AAB is not directly installable like an APK. All profiles share the same package, so they cannot coexist as separate apps on one phone; different signing credentials can prevent upgrading an existing installation. Back up/sync real data before changing signing/install mode.
+
+EAS uses selected development/preview/production environments. In EAS Project Settings → Environment variables, add the two public Supabase variables in all environments used for cloud builds, visibility Plain text. One project may serve personal use initially; test accounts prevent test data from polluting your real dataset. Values with `EXPO_PUBLIC_` are readable in the bundle and must never contain secrets. Example commands with placeholders:
+
+```powershell
+npx eas-cli@latest env:set --name EXPO_PUBLIC_SUPABASE_URL --value 'https://YOUR_PROJECT.supabase.co' --environment preview --visibility plaintext
+npx eas-cli@latest env:set --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value 'YOUR_PUBLIC_ANON_OR_PUBLISHABLE_KEY' --environment preview --visibility plaintext
+npx eas-cli@latest env:list --environment preview
+```
+
+Repeat for development/production. See [current Expo environment instructions](https://docs.expo.dev/eas/environment-variables/manage/) and [build-profile documentation](https://docs.expo.dev/build/eas-json/). `.env` files are ignored and should not be your hosted-build configuration. Preserve version history: increase `expo.version` for user-visible releases; production `autoIncrement` with local version source increases Android versionCode, and resulting config changes should be retained before the next build. Ensure preview/development versionCode is suitable for installed upgrades.
+
+## Verification and limitations
+
+Run `npm run typecheck`, `npm run lint`, `npm test`; tests execute real file-backed SQLite SQL/migrations and embedded PostgreSQL schema/RLS with mocked native interfaces/auth/transport. They are not full end-to-end phone or live Supabase tests. The release checklist includes precise daily balance changes, all filters/reports, offline restart, A/B cloud restore and owner isolation, notification and App Lock behavior, spreadsheet export and small/typical/large phone layouts.
+
+Dependency advisories remain in Expo-related transitive tooling/router packages. Compatible updates were checked without forcing a major downgrade. See PHASE8 for exact counts and relevant paths. Native APK/AAB compilation/signing, EAS linking/environments, deployed RLS, actual phone sharing/notifications/biometrics, first large restore memory and responsive/dark-mode inspection remain release gates. Keep an independent cloud/export copy; uninstalling an app can remove local SQLite.
+
+Future iOS requires Apple Developer credentials/signing and an EAS iOS build; the Face ID usage description is already configured. Test enrolled Face ID, OS fallback, local notification permissions, picker behavior, sharing and app-switcher privacy on a real iPhone. Do not assume Android validation certifies iOS.

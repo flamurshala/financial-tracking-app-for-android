@@ -104,7 +104,7 @@ async function reconcile(settings: FinanceReminderSettings, prompt: boolean): Pr
   } catch (error) {
     state.status = 'Error';
     state.error = Platform.OS === 'web' ? 'Notifications require Android or iOS.' : 'Unable to schedule reminder. Please retry.';
-    if (__DEV__) console.warn('Finance reminder', error);
+    if (__DEV__) console.warn('Finance reminder', error instanceof Error ? error.name : 'UnknownError');
   }
   return state;
 }

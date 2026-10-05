@@ -5,8 +5,10 @@ import { formatAmount } from "../../utils/currency";
 import { useTheme } from "../../hooks/useTheme";
 export function TransactionRow({
   transaction,
+  hidden = false,
 }: {
   transaction: TransactionView;
+  hidden?: boolean;
 }) {
   const colors = useTheme();
   const category = transaction.is_balance_adjustment
@@ -24,7 +26,7 @@ export function TransactionRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${transaction.description}, ${transaction.type === "income" ? "plus" : "minus"} ${formatAmount(transaction.amount_cents)}`}
+      accessibilityLabel={`${transaction.description}, ${transaction.type}, ${hidden ? "amount hidden" : formatAmount(transaction.amount_cents)}`}
       onPress={() =>
         router.push({
           pathname: "/transaction/[id]",
@@ -59,7 +61,7 @@ export function TransactionRow({
           }}
         >
           {transaction.type === "income" ? "+" : "−"}
-          {formatAmount(transaction.amount_cents)}
+          {hidden ? "••••" : formatAmount(transaction.amount_cents)}
         </Text>
       </View>
       <Text style={{ color: colors.muted, fontSize: 14 }}>{secondary}</Text>

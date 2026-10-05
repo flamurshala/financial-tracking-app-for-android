@@ -4,7 +4,6 @@ import type {
   Transaction,
   TransactionType,
 } from "../../types/finance";
-import { sumCents } from "../../utils/currency";
 import type { TransactionFilters } from "../../types/statistics";
 import { buildTransactionWhere } from "./filterSql";
 export interface AccountBalance extends Account {
@@ -17,31 +16,18 @@ export interface TransactionView extends Transaction {
 export async function getAccountBalances(
   db: SQLiteDatabase,
 ): Promise<AccountBalance[]> {
-  const rows = await db.getAllAsync<
-    Account & {
-      amount_cents: number | null;
-      transaction_type: TransactionType | null;
-    }
-  >(
-    `SELECT a.*, t.amount_cents, t.type AS transaction_type FROM accounts a LEFT JOIN transactions t ON t.account_id = a.id AND t.deleted_at IS NULL WHERE a.deleted_at IS NULL ORDER BY a.is_archived, a.name COLLATE NOCASE, a.id`,
+  const rows = await db.getAllAsync<Account & { ledger_cents: string }>(
+    "SELECT a.*, CAST(COALESCE(SUM(CASE t.type WHEN 'income' THEN t.amount_cents ELSE -t.amount_cents END),0) AS TEXT) AS ledger_cents FROM accounts a LEFT JOIN transactions t ON t.account_id=a.id AND t.deleted_at IS NULL WHERE a.deleted_at IS NULL GROUP BY a.id ORDER BY a.is_archived,a.name COLLATE NOCASE,a.id",
   );
-  const grouped = new Map<string, { account: Account; amounts: number[] }>();
-  for (const row of rows) {
-    const { amount_cents, transaction_type, ...account } = row;
-    let group = grouped.get(row.id);
-    if (!group) {
-      group = { account, amounts: [row.initial_balance_cents] };
-      grouped.set(row.id, group);
-    }
-    if (amount_cents !== null)
-      group.amounts.push(
-        transaction_type === "income" ? amount_cents : -amount_cents,
-      );
-  }
-  return [...grouped.values()].map(({ account, amounts }) => ({
-    ...account,
-    balance_cents: sumCents(amounts),
-  }));
+  return rows.map(({ ledger_cents, ...account }) => {
+    const total = BigInt(ledger_cents) + BigInt(account.initial_balance_cents);
+    if (
+      total > BigInt(Number.MAX_SAFE_INTEGER) ||
+      total < BigInt(Number.MIN_SAFE_INTEGER)
+    )
+      throw new Error("Calculated amount exceeds safe integer cents");
+    return { ...account, balance_cents: Number(total) };
+  });
 }
 export async function getTransactionViews(
   db: SQLiteDatabase,

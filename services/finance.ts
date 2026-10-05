@@ -17,7 +17,10 @@ import {
   getMetadata,
   setMetadata,
 } from "../database/repositories/metadataRepository";
-import { withWriteTransaction } from "../database/repositories/shared";
+import {
+  withWriteTransaction,
+  withReadSnapshot,
+} from "../database/repositories/shared";
 import {
   centsSchema,
   idSchema,
@@ -70,8 +73,8 @@ export async function getDashboard(db: SQLiteDatabase, now = new Date()) {
     fromDate: localCalendarDate(startOfMonth(now)),
     toDate: localCalendarDate(endOfMonth(now)),
   };
-  // Short exclusive snapshot; prevents totals and balances spanning a concurrent write.
-  return withWriteTransaction(db, async (tx) => {
+  // Consistent WAL snapshot without reserving the writer connection.
+  return withReadSnapshot(db, async (tx) => {
     const accounts = await getAccountBalances(tx);
     const monthIncome = await getTotalIncome(tx, month);
     const monthExpenses = await getTotalExpenses(tx, month);

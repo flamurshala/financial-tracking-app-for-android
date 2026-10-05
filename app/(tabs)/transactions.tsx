@@ -1,3 +1,4 @@
+import { useExportStore } from "../../store/exportStore";
 import { useState } from "react";
 import { router } from "expo-router";
 import { Button, Input } from "../../components/ui";
@@ -38,6 +39,14 @@ export default function Transactions() {
             returnKeyType="search"
           />
           <TransactionFilterPanel filters={filters} onApply={setFilters} />
+          <Button
+            title="Export matching transactions"
+            secondary
+            onPress={() => {
+              useExportStore.getState().setFilters({ ...filters, search });
+              router.push("/export");
+            }}
+          />
           {search ? (
             <Button
               secondary

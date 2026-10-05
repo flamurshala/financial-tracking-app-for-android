@@ -1,3 +1,4 @@
+import { useExportStore } from "../../store/exportStore";
 import { router } from "expo-router";
 import { Screen, Card, SectionTitle, Body, Button } from "../../components/ui";
 import { useSettingsStore } from "../../store/settingsStore";
@@ -300,7 +301,13 @@ export default function Settings() {
       <SecuritySettings />
       <SectionTitle>Data</SectionTitle>
       <Card>
-        <Body>Export Data: planned for a later phase.</Body>
+        <Button
+          title="Export Data"
+          onPress={() => {
+            useExportStore.setState({ filters: null });
+            router.push("/export");
+          }}
+        />
         <Body>
           SQLite stores finances on this phone. Optional cloud sync provides a
           separate copy; signing out keeps local records and App Lock settings.

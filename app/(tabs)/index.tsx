@@ -1,3 +1,6 @@
+import { useSettingsStore } from "../../store/settingsStore";
+import { saveHideBalances } from "../../services/preferences";
+import { Alert } from "react-native";
 import { useCallback } from "react";
 import { router } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
@@ -19,6 +22,7 @@ import { PeriodSummary } from "../../components/finance/PeriodSummary";
 import { TransactionRow } from "../../components/finance/TransactionRow";
 export default function Home() {
   const db = useSQLiteContext();
+  const hidden = useSettingsStore((state) => state.hideBalances);
   const query = useLocalQuery(useCallback(() => getDashboard(db), [db]));
   return (
     <Screen>
@@ -37,12 +41,23 @@ export default function Home() {
         <>
           <Card>
             <Body>Current Total Balance</Body>
-            <SectionTitle>{formatAmount(query.data.balance)}</SectionTitle>
+            <Button
+              secondary
+              title={hidden ? "Show balances" : "Hide balances"}
+              onPress={() => {
+                void saveHideBalances(db, !hidden).catch(() =>
+                  Alert.alert("Balances", "Unable to save display preference."),
+                );
+              }}
+            />
+            <SectionTitle>
+              {hidden ? "••••" : formatAmount(query.data.balance)}
+            </SectionTitle>
             {query.data.accounts.map((account) => (
               <Body key={account.id}>
                 {account.name}
                 {account.is_archived ? " (archived)" : ""} ·{" "}
-                {formatAmount(account.balance_cents)}
+                {hidden ? "••••" : formatAmount(account.balance_cents)}
               </Body>
             ))}
           </Card>
@@ -58,8 +73,17 @@ export default function Home() {
               />
             </>
           ) : null}
-          <PeriodSummary title="This Month" totals={query.data.month} />
-          <PeriodSummary title="Today" totals={query.data.today} today />
+          <PeriodSummary
+            hidden={hidden}
+            title="This Month"
+            totals={query.data.month}
+          />
+          <PeriodSummary
+            hidden={hidden}
+            title="Today"
+            totals={query.data.today}
+            today
+          />
           <SectionTitle>Recent transactions</SectionTitle>
           {query.data.recent.length ? (
             <Card>
@@ -67,6 +91,7 @@ export default function Home() {
                 <TransactionRow
                   key={transaction.id}
                   transaction={transaction}
+                  hidden={hidden}
                 />
               ))}
               <Button

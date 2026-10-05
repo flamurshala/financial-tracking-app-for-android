@@ -18,6 +18,20 @@ export async function withWriteTransaction<T>(
   db: SQLiteDatabase,
   task: (tx: SQLiteDatabase) => Promise<T>,
 ): Promise<T> {
+  return withConnectionTransaction(db, task, false);
+}
+/** Dedicated WAL read snapshot: exports do not reserve the writer connection. */
+export async function withReadSnapshot<T>(
+  db: SQLiteDatabase,
+  task: (tx: SQLiteDatabase) => Promise<T>,
+): Promise<T> {
+  return withConnectionTransaction(db, task, true);
+}
+async function withConnectionTransaction<T>(
+  db: SQLiteDatabase,
+  task: (tx: SQLiteDatabase) => Promise<T>,
+  readOnly: boolean,
+): Promise<T> {
   const separator = db.databasePath.lastIndexOf("/");
   const name = db.databasePath.slice(separator + 1);
   const directory =
@@ -31,7 +45,8 @@ export async function withWriteTransaction<T>(
   let begun = false;
   try {
     await tx.execAsync("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-    await tx.execAsync("BEGIN IMMEDIATE");
+    if (readOnly) await tx.execAsync("PRAGMA query_only = ON;");
+    await tx.execAsync(readOnly ? "BEGIN" : "BEGIN IMMEDIATE");
     begun = true;
     const result = await task(tx);
     await tx.execAsync("COMMIT");
