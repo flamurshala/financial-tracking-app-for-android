@@ -302,7 +302,6 @@ test("reject invalid amounts, dates, descriptions, references and category types
       { amount_cents: 1.5 },
       { amount_cents: Number.MAX_SAFE_INTEGER + 1 },
       { transaction_date: "2026-02-30" },
-      { description: "   " },
       { account_id: "invalid" },
       { category_id: null },
       { category_id: income.id },

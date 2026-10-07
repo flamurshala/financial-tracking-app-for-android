@@ -33,11 +33,7 @@ export const entryFormSchema = z
   .object({
     type: z.enum(["expense", "income"]),
     amount: decimalField(),
-    description: z
-      .string()
-      .trim()
-      .min(1, "Enter a description")
-      .max(2000, "Use at most 2000 characters"),
+    description: z.string().max(2000, "Use at most 2000 characters"),
     account_id: z.uuid("Choose an account"),
     category_id: z.string(),
     transaction_date: calendarDateSchema,

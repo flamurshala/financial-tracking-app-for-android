@@ -89,7 +89,7 @@ test("CSV preserves Unicode/quotes/newlines, exact cents, filtered matches and a
       json += text;
     });
     const backup = JSON.parse(json);
-    assert.equal(backup.schema_version, 5);
+    assert.equal(backup.schema_version, 6);
     assert.equal(backup.transactions.length, 3);
     assert.equal(backup.preferences["settings.theme"], "dark");
     assert.ok(!json.includes("SECRET"));

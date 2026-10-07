@@ -55,6 +55,18 @@ export default function RootLayout() {
                   options={{ title: "Cloud account" }}
                 />
                 <Stack.Screen
+                  name="(auth)/register"
+                  options={{ title: "Create Account" }}
+                />
+                <Stack.Screen
+                  name="import"
+                  options={{ title: "Import Transactions" }}
+                />
+                <Stack.Screen
+                  name="export"
+                  options={{ title: "Export Data" }}
+                />
+                <Stack.Screen
                   name="transaction/add"
                   options={{ title: "Add transaction", presentation: "modal" }}
                 />

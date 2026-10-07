@@ -300,6 +300,10 @@ export default function Settings() {
       <SectionTitle>Security</SectionTitle>
       <SecuritySettings />
       <SectionTitle>Data</SectionTitle>
+      <Button
+        title="Import Transactions"
+        onPress={() => router.push("/import")}
+      />
       <Card>
         <Button
           title="Export Data"

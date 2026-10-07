@@ -40,7 +40,8 @@ export function PeriodSummary({
           <Text
             style={{
               color: colors.text,
-              fontSize: 17,
+              fontSize: today && row.label === "Spent" ? 22 : 17,
+              fontWeight: today && row.label === "Spent" ? "700" : "400",
               fontVariant: ["tabular-nums"],
             }}
           >

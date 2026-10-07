@@ -242,7 +242,6 @@ test("Save & Add Another reset keeps date/account/type and schema rejects invali
     { amount: "-1" },
     { amount: "2.201" },
     { amount: "90071992547409.92" },
-    { description: "" },
     { account_id: "" },
     { category_id: "" },
     { transaction_date: "2026-02-30" },

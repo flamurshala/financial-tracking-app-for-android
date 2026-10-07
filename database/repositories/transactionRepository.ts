@@ -28,7 +28,9 @@ async function validateReferences(
       throw new Error("Choose an active category");
     if (category.type !== "both" && category.type !== data.type)
       throw new Error("Category does not match transaction type");
+    if (!data.description.trim()) data.description = category.name;
   }
+  if (!data.description.trim()) data.description = "Balance Adjustment";
 }
 export async function createTransaction(
   db: SQLiteDatabase,

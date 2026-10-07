@@ -232,8 +232,8 @@ export function TransactionForm({
         name="description"
         render={({ field, fieldState }) => (
           <Input
-            label="Description"
-            placeholder="What was it for?"
+            label="Description (optional)"
+            placeholder="Leave blank to use the category name"
             value={field.value}
             onChangeText={field.onChange}
             onBlur={field.onBlur}

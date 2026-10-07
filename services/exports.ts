@@ -14,6 +14,7 @@ import {
   writeCsv,
   writeJsonBackup,
 } from "../database/repositories/exportRepository";
+import { importTemplate } from "../utils/csvImport";
 import { appLock } from "./appLock";
 /** Files stay in private cache for recipients; delete previous-day exports on next export. */
 export async function shareFinanceExport(
@@ -22,6 +23,32 @@ export async function shareFinanceExport(
   filters: TransactionFilters,
   label: string,
   progress: (count: number) => void,
+  cancelled: () => boolean,
+) {
+  return shareLocalCsvOrJson(
+    kind,
+    label,
+    async (write, check) => {
+      if (kind === "csv") await writeCsv(db, filters, write, check, progress);
+      else await writeJsonBackup(db, write, check);
+    },
+    cancelled,
+  );
+}
+export function shareImportTemplate(cancelled: () => boolean) {
+  return shareLocalCsvOrJson(
+    "csv",
+    "import-template",
+    async (write) => {
+      write(importTemplate);
+    },
+    cancelled,
+  );
+}
+async function shareLocalCsvOrJson(
+  kind: "csv" | "json",
+  label: string,
+  build: (write: (text: string) => void, check: () => void) => Promise<void>,
   cancelled: () => boolean,
 ) {
   if (!(await Sharing.isAvailableAsync()))
@@ -61,8 +88,7 @@ export async function shareFinanceExport(
     const output = handle;
     const write = (text: string) =>
       output.writeBytes(new TextEncoder().encode(text));
-    if (kind === "csv") await writeCsv(db, filters, write, check, progress);
-    else await writeJsonBackup(db, write, check);
+    await build(write, check);
     check();
     complete = true;
   } catch (error) {

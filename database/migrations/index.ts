@@ -3,6 +3,7 @@ import { financeMigration } from "./002_finance";
 import { defaultCategoriesMigration } from "./003_default_categories";
 import { reportingMigration } from "./004_reporting";
 import { syncMigration } from "./005_sync";
+import { importBatchesMigration } from "./006_import_batches";
 export const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -17,4 +18,5 @@ export const migrations: readonly Migration[] = [
   defaultCategoriesMigration,
   reportingMigration,
   syncMigration,
+  importBatchesMigration,
 ];

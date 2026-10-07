@@ -10,7 +10,7 @@ An offline-first personal finance app for Android, built with React Native 0.86,
 
 UI → repository/service → SQLite → sync engine → authenticated Supabase.
 
-SQLite `finance.db` remains the local source of truth. Save/edit/archive/delete commits locally before sync; connection failure leaves records pending. Zustand holds UI preferences/status and filter state, not a replacement financial database. SQLite WAL, foreign keys, dedicated write transactions and consistent read snapshots protect local operations. Migrations 1–5 run in order inside a transaction, preserve existing data and reject a newer or nonsequential migration history. This phase adds no financial-data migration. Never clear a real database to fix an upgrade failure.
+SQLite `finance.db` remains the local source of truth. Save/edit/archive/delete commits locally before sync; connection failure leaves records pending. Zustand holds UI preferences/status and filter state, not a replacement financial database. SQLite WAL, foreign keys, dedicated write transactions and consistent read snapshots protect local operations. Migrations 1–6 run in order inside a transaction, preserve existing data and reject a newer or nonsequential migration history. Migration 6 adds local CSV import history without changing existing financial records. Never clear a real database to fix an upgrade failure.
 
 Accounts contain an initial balance in cents. Transactions reference accounts and historical categories; income adds and expense subtracts. Balance adjustments are ordinary signed income/expense records with an adjustment flag, appear in history/CSV/balances, and are excluded from spending statistics. Soft deletion sets `deleted_at` and sync pending rather than physically removing history. Archived accounts retain their money and history in combined ownership balances; archived categories remain attached to old transactions but are unavailable for new entries. Account/category restoration preserves identifiers.
 
@@ -51,7 +51,7 @@ Android Expo Go intentionally reports reminders unavailable instead of importing
 
 Cloud is optional; leave public variables unset for local-only finance. To enable it:
 
-1. Create a Supabase project and enable email/password authentication. Create/confirm your user account through Supabase; the app provides sign-in, not a registration flow.
+1. Create a Supabase project and enable email/password authentication. Users can now choose Create Account on the app's Sign In screen. Configure the project's email confirmation landing URL and email delivery; confirmation-enabled projects require users to confirm their email before signing in. With confirmation disabled, registration accepts the returned session immediately, subject to the existing local dataset owner checks. The app validates email, matching passwords and a minimum eight-character password; Supabase can enforce stronger password requirements. Passwords are never stored in the finance database or logged.
 2. In a **fresh project**, execute the complete [supabase/schema.sql](supabase/schema.sql) using Dashboard → SQL Editor. This installs tables, owner-bound composite foreign keys, constraints, RLS policies, server-stamped versions, triggers and `finance_sync_cursor`. The script creates objects and is not an idempotent upgrade script: do not rerun it blindly in an existing populated project.
 3. Copy `.env.example` to `.env` only if you have not already configured `.env`. Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` to your project URL and public publishable/anon key. Never put a service-role/secret key or user password in source or public variables. Existing `.env` was preserved.
 4. Restart Metro after environment changes; native embedded builds must be rebuilt to change their public bundle configuration.
@@ -66,6 +66,8 @@ On device A create/sync data, then install on B with empty SQLite and sign in as
 ## Notifications and App Lock
 
 Settings → Notifications controls one daily local reminder (22:00 default), time, permission and status. Reconciliation replaces stale schedules and prevents duplicates. Messages contain no financial balances. Enable notification permission and the Finance Reminders channel; device battery/Do Not Disturb policies can affect delivery. Schedule two minutes ahead and observe exactly one notification in an installed build, then test disable/re-enable, restart, changed time and lock interaction. The development test button schedules a separate three-second test notification.
+
+Daily and test notifications are silent: content uses `sound: false` and an empty vibration pattern, the foreground handler disables sound, and Android's `finance-reminders-silent-v2` channel uses `sound: null` with vibration disabled. It retains DEFAULT importance for visibility. On upgrade, the app removes the old `finance-reminders` channel and replaces stale daily schedules while preserving the reminder ID and saved time; an explicitly blocked old channel stays blocked. A new channel ID is necessary because Android persists a channel's original sound settings. The plugin contains no custom sound configuration or sound files. This JavaScript-only fix requires reloading the updated app, not rebuilding the native development client. Test the reminder on a device in foreground and background; Android system channel preferences can override app defaults.
 
 Settings → Security enables App Lock only after successful enrolled-biometric verification. Unlock supports the OS device-credential fallback. No custom PIN is stored. Policy is in SecureStore; it works offline and independently of cloud sign-in. Cold start always requires unlock when enabled. Background timeout choices are immediate, one, five or fifteen minutes. All routes/deep links/notification launches share the root gate; unresolved/locked content is not exposed to touch or accessibility. Capture/recents protection is requested using the platform API and errors are shown.
 
@@ -89,11 +91,11 @@ Export files are plaintext financial copies. They remain in private temporary ca
 
 [eas.json](eas.json) selects explicit EAS environments and artifact types:
 
-| Profile | Environment | Artifact | Use |
-| --- | --- | --- | --- |
-| development | development | APK, development client | Native debugging with Metro |
-| preview | preview | APK, internal distribution | Installable personal acceptance build |
-| production | production | AAB | Future store distribution |
+| Profile     | Environment | Artifact                   | Use                                   |
+| ----------- | ----------- | -------------------------- | ------------------------------------- |
+| development | development | APK, development client    | Native debugging with Metro           |
+| preview     | preview     | APK, internal distribution | Installable personal acceptance build |
+| production  | production  | AAB                        | Future store distribution             |
 
 Initialize/link your Expo account and project yourself, retain the generated project ID in app config, and configure signing credentials:
 
@@ -124,3 +126,11 @@ Run `npm run typecheck`, `npm run lint`, `npm test`; tests execute real file-bac
 Dependency advisories remain in Expo-related transitive tooling/router packages. Compatible updates were checked without forcing a major downgrade. See PHASE8 for exact counts and relevant paths. Native APK/AAB compilation/signing, EAS linking/environments, deployed RLS, actual phone sharing/notifications/biometrics, first large restore memory and responsive/dark-mode inspection remain release gates. Keep an independent cloud/export copy; uninstalling an app can remove local SQLite.
 
 Future iOS requires Apple Developer credentials/signing and an EAS iOS build; the Face ID usage description is already configured. Test enrolled Face ID, OS fallback, local notification permissions, picker behavior, sharing and app-switcher privacy on a real iPhone. Do not assume Android validation certifies iOS.
+
+## October 7 update
+
+Today now precedes This Month on Home; descriptions are optional with category fallback; Sign In links to in-app registration; Settings supports validated, previewed CSV imports. See [update details and device checklist](UPDATE-2026-10-07.md) for the six-column template, category approval, account mapping, atomic writes, duplicate warnings, limits and validation evidence.
+
+Share the template from Settings → Data → Import Transactions. Its required headers are `Date,Type,Amount,Description,Category,Account`; their order and capitalization may vary. Use valid YYYY-MM-DD dates, Expense/Income types and positive EUR amounts with at most two decimal places. Description values can be blank. Quoted commas, multiline descriptions and UTF-8 names are supported.
+
+Preview reports invalid rows before any writes. Map unknown account names to existing active accounts and explicitly approve new categories; their type is derived as expense, income or both. Confirm the valid rows and the skipped count. The import commits atomically to SQLite, then the existing pending-record Supabase sync runs. Initial balances remain unchanged. Migration 6 records local content fingerprints: repeated files require an explicit Import Anyway decision. Warnings apply to this device's import history, while identical legitimate rows within a file remain separate transactions.

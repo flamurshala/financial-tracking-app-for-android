@@ -75,14 +75,14 @@ export default function Home() {
           ) : null}
           <PeriodSummary
             hidden={hidden}
-            title="This Month"
-            totals={query.data.month}
-          />
-          <PeriodSummary
-            hidden={hidden}
             title="Today"
             totals={query.data.today}
             today
+          />
+          <PeriodSummary
+            hidden={hidden}
+            title="This Month"
+            totals={query.data.month}
           />
           <SectionTitle>Recent transactions</SectionTitle>
           {query.data.recent.length ? (
