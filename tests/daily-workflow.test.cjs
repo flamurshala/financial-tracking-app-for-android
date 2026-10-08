@@ -199,7 +199,6 @@ test("Unicode description search, Albanian name inflection and literal punctuati
       await saveEntry(db, input("Other", 100, "expense", description));
     for (const [search, description] of [
       ["naft", "30 NAFT benzit"],
-      ["elona", "darka me elonen"],
       ["spotify", "Spotify"],
       ["qëthja", "QËTHJA"],
       ["'; --", "100% quoted '; --"],

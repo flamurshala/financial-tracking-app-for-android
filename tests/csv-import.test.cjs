@@ -63,7 +63,7 @@ test("blank and whitespace descriptions fall back on create/edit; custom text is
         .description,
       "Coffee",
     );
-    const custom = "  Dinner with Elona, Çaj  ";
+    const custom = "  Dinner with someone, Çaj  ";
     assert.equal(
       (await createTransaction(db, { ...base, description: custom }))
         .description,
@@ -91,10 +91,10 @@ test("blank and whitespace descriptions fall back on create/edit; custom text is
   }));
 test("parser supports reordered/case-insensitive headers, commas, escaped quotes, multiline and Unicode", () => {
   const rows = parseImportCsv(
-    '\uFEFFaccount,CATEGORY,description,amount,TYPE,date\r\nCash,Dinner,"Dinner with Elona, ""drinks""\nÇaj",12.50,EXPENSE,2026-10-01\r\n',
+    '\uFEFFaccount,CATEGORY,description,amount,TYPE,date\r\nCash,Dinner,"Dinner with someone, ""drinks""\nÇaj",12.50,EXPENSE,2026-10-01\r\n',
   );
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].description, 'Dinner with Elona, "drinks"\nÇaj');
+  assert.equal(rows[0].description, 'Dinner with someone, "drinks"\nÇaj');
   assert.equal(rows[0].rowNumber, 2);
   assert.equal(parseImportCsv(importTemplate).length, 4);
   for (const text of [
@@ -111,7 +111,7 @@ test("five-row import previews without writes; exact money/statistics, optional 
   fixture(async (db, account, file) => {
     const text =
       header +
-      '2026-10-01,Expense,1.00,,Coffee,Cash\r\n2026-10-01,Expense,1.00,,Coffee,Cash\r\n2026-10-01,Expense,8.50,Shminka për fejesë,Groceries,Cash\r\n2026-10-01,Expense,12.50,"Dinner with Elona, drinks included",Dinner,Cash\r\n2026-10-01,Income,50.00,Client payment,Client Payment,Cash';
+      '2026-10-01,Expense,1.00,,Coffee,Cash\r\n2026-10-01,Expense,1.00,,Coffee,Cash\r\n2026-10-01,Expense,8.50,Shminka për fejesë,Groceries,Cash\r\n2026-10-01,Expense,12.50,"Dinner with someone, drinks included",Dinner,Cash\r\n2026-10-01,Income,50.00,Client payment,Client Payment,Cash';
     const raw = parseImportCsv(text),
       preview = await previewImport(db, raw, {});
     assert.equal(preview.rows.length, 5);

@@ -16,7 +16,7 @@ Added `react-native-gifted-charts` 1.4.79 with Expo-compatible `react-native-svg
 
 ## Filtering and money
 
-Every applied condition is combined with AND in parameterized SQLite: type, category, account, inclusive dates, amount bounds in cents, and escaped literal description tokens. Lists fetch 51 rows to display 50 and determine pagination. Search normalizes NFC/lowercase text into a derived column; migration 4 backfills existing descriptions without changing financial metadata or synchronization status. Insert/edit keeps the column current. The small trailing-vowel name aid preserves `elona` → `Elonën`; it is not full linguistic stemming. Substring search scans candidate descriptions in SQLite and does not use a B-tree text index or JavaScript transaction scan.
+Every applied condition is combined with AND in parameterized SQLite: type, category, account, inclusive dates, amount bounds in cents, and escaped literal description tokens. Lists fetch 51 rows to display 50 and determine pagination. Search normalizes NFC/lowercase text into a derived column; migration 4 backfills existing descriptions without changing financial metadata or synchronization status. Insert/edit keeps the column current. The small trailing-vowel name aid preserves; it is not full linguistic stemming. Substring search scans candidate descriptions in SQLite and does not use a B-tree text index or JavaScript transaction scan.
 
 Money remains safe integer cents. SQL uses integer SUM, validates safe results, and rejects overflow; exact BigInt division rounds averages to the nearest cent, half upward. Percentages and chart ratios are presentation only. The Hermes-compatible formatter never passes BigInt to Intl.
 
@@ -36,7 +36,7 @@ Native Android/iOS UI and Expo SQLite runtime were not exercised here; no device
 2. Test all five periods, Previous/Next, December/January, custom same-day and reversed dates, native date pickers and account selection.
 3. Enter the October fixture, check exact summary/category totals, donut colors, small-screen and large-font layouts, and all twelve yearly months including zero months. Scroll the yearly chart.
 4. Tap expense/income categories, verify dates/account/count/average, then open, edit and delete transactions. Return and confirm refreshed reports without restarting.
-5. Combine category + account + dates + amount bounds + search; try `elona`, Unicode accents and literal `%`/`_`. Test pagination, Apply, filter counts and Clear All.
+5. Combine category + account + dates + amount bounds + search; try `dinner`, Unicode accents and literal `%`/`_`. Test pagination, Apply, filter counts and Clear All.
 6. Correct an account balance. Confirm history/balance change while expense/income reports remain unchanged. Repeat in airplane mode and after force-close/reopen.
 
 Phase 5 has not been started.

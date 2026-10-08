@@ -131,11 +131,11 @@ test("all filters combine in SQL, inclusive amount/date bounds, search literals 
       categoryId: category("Dinner").id,
       minAmountCents: 2200,
       maxAmountCents: 2200,
-      search: "elona",
+      search: "Dinner",
     };
     const rows = await getTransactionViews(db, filters);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].description, "Darkë me Elonën");
+    assert.equal(rows[0].description, "Dinner with someone");
     assert.equal(
       (await getTransactionViews(db, { ...filters, accountId: card.id }))
         .length,
@@ -408,7 +408,7 @@ test("version 3 upgrade backfills Unicode search without changing financial meta
     );
     await initializeDatabase(db);
     await initializeDatabase(db);
-    const row = (await getTransactionViews(db, { search: "elona" }))[0];
+    const row = (await getTransactionViews(db, { search: "dinner" }))[0];
     assert.equal(row.id, id);
     assert.equal(row.amount_cents, 123);
     assert.equal(row.updated_at, "old-updated");

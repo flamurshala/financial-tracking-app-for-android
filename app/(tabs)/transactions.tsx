@@ -31,7 +31,7 @@ export default function Transactions() {
           />
           <Input
             label="Search descriptions"
-            placeholder="naft, elona, spotify…"
+            placeholder="fuel, dinner, spotify…"
             value={search}
             onChangeText={setSearch}
             autoCorrect={false}

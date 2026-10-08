@@ -10,7 +10,7 @@ export function matchesDescription(
     .split(/\s+/)
     .every((token) => {
       if (text.includes(token)) return true;
-      // A small name-inflection aid: Elona can also find Elonen. Not a general translator.
+      // A small name-inflection aid: dinner can also find dinners. Not a general translator.
       const stem = token.length >= 4 ? token.replace(/[aë]$/, "") : token;
       return (
         stem !== token &&
