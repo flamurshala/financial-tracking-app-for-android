@@ -26,6 +26,9 @@ test('actual PostgreSQL schema: RLS ownership, composite FK, money constraints, 
     assert.notEqual(new Date(updated.updated_at).getUTCFullYear(), 2000);
     const category = '40000000-0000-4000-8000-000000000001';
     await pg.query('INSERT INTO categories(user_id,id,name,type,created_at) VALUES ($1,$2,$3,$4,now())', [userA,category,'Coffee','expense']);
+    await pg.query('UPDATE categories SET deleted_at=now() WHERE id=$1',[category]);
+    await pg.query('UPDATE categories SET deleted_at=null WHERE id=$1',[category]);
+    assert.ok((await pg.query('SELECT deleted_at FROM categories WHERE id=$1',[category])).rows[0].deleted_at);
     await pg.query('INSERT INTO transactions(user_id,id,account_id,category_id,type,amount_cents,description,transaction_date,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())', [userA,account,account,category,'expense',100,'Coffee','2026-10-01']);
     await assert.rejects(pg.query('INSERT INTO accounts(user_id,id,name,type,initial_balance_cents,created_at) VALUES ($1,$2,$3,$4,$5,now())', [userB,account,'Spoof','cash',0]), /Unauthorized|row-level security/);
     await pg.exec(`SELECT set_config('request.jwt.claim.sub','${userB}',false);`);
@@ -51,8 +54,37 @@ test('actual PostgreSQL schema: RLS ownership, composite FK, money constraints, 
     await pg.exec('RESET ROLE;');
     const acceptance = fs.readFileSync('supabase/rls-check.sql','utf8').replace('REPLACE_WITH_USER_A_UUID',userA).replace('REPLACE_WITH_USER_B_UUID',userB).replace('REPLACE_WITH_ACCOUNT_A_UUID',onlyA);
     await pg.exec(acceptance);
+    await pg.exec(`SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','${userA}',false);`);
+    const transferId='50000000-0000-4000-8000-000000000001';
+    await pg.query('INSERT INTO transfers(user_id,id,from_account_id,to_account_id,amount_cents,transfer_date,created_at) VALUES($1,$2,$3,$4,10000,$5,now())',[userA,transferId,account,onlyA,'2026-10-31']);
+    assert.equal((await pg.query('SELECT * FROM transfers')).rows.length,1);
+    await assert.rejects(pg.query('UPDATE transfers SET to_account_id=from_account_id'),/check constraint/);
+    await assert.rejects(pg.query('UPDATE transfers SET amount_cents=0'),/check constraint/);
+    await assert.rejects(pg.query('UPDATE transfers SET amount_cents=9007199254740992'),/check constraint/);
+    await pg.exec(`SELECT set_config('request.jwt.claim.sub','${userB}',false);`);
+    assert.equal((await pg.query('SELECT * FROM transfers')).rows.length,0);
+    assert.equal((await pg.query("UPDATE transfers SET note='spoof' RETURNING id")).rows.length,0);
+    await assert.rejects(pg.query('INSERT INTO transfers(user_id,id,from_account_id,to_account_id,amount_cents,transfer_date,created_at) VALUES($1,$2,$3,$4,100,$5,now())',[userA,transferId,account,onlyA,'2026-10-31']),/Unauthorized|row-level security/);
+    await assert.rejects(pg.query('INSERT INTO transfers(user_id,id,from_account_id,to_account_id,amount_cents,transfer_date,created_at) VALUES($1,$2,$3,$4,100,$5,now())',[userB,transferId,account,onlyA,'2026-10-31']),/foreign key/);
+    await assert.rejects(pg.query('DELETE FROM transfers'),/permission denied/);
+
     await pg.exec('RESET ROLE; SET ROLE anon;');
     await assert.rejects(pg.query('SELECT * FROM accounts'), /permission denied/);
     await assert.rejects(pg.query('SELECT finance_sync_cursor()'), /permission denied/);
   } finally { await pg.close(); }
+});
+
+
+test('incremental transfer migration preserves existing PostgreSQL financial rows',async()=>{
+ const pg=new PGlite();try{
+  await pg.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; GRANT USAGE ON SCHEMA auth,public TO authenticated; INSERT INTO auth.users VALUES ('${userA}');`);
+  const full=fs.readFileSync('supabase/schema.sql','utf8');
+  await pg.exec(full.split('-- Account transfers (included for fresh installations).')[0]);
+  await pg.exec(`SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','${userA}',false);`);
+  await pg.query('INSERT INTO accounts(user_id,id,name,type,initial_balance_cents,created_at) VALUES($1,$2,$3,$4,12345,now())',[userA,account,'Existing','bank']);
+  await pg.exec('RESET ROLE');
+  await pg.exec(fs.readFileSync('supabase/migrations/007_transfers.sql','utf8'));
+  assert.equal(Number((await pg.query('SELECT initial_balance_cents FROM accounts')).rows[0].initial_balance_cents),12345);
+  assert.equal((await pg.query('SELECT * FROM transfers')).rows.length,0);
+ }finally{await pg.close();}
 });

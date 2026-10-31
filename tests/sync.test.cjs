@@ -97,6 +97,7 @@ function cloud() {
     accounts: new Map(),
     categories: new Map(),
     transactions: new Map(),
+    transfers: new Map(),
   };
   const api = {
     tables,
@@ -451,4 +452,47 @@ test("more than two network pages restore idempotently with tombstones and Unico
     file.sqlite.close();
     destination.sqlite.close();
   }
+});
+
+test('offline transfers and category reassignment synchronize and restore including tombstones',async()=>{
+ const source=database(),destination=database(),api=cloud();
+ const transfers=require('../database/repositories/transferRepository.ts');
+ const categories=require('../database/repositories/categoryRepository.ts');
+ try{
+  await initializeDatabase(source.adapter);let db=source.adapter;
+  const bank=await createAccount(db,{name:'Bank',type:'bank',initial_balance_cents:100000});
+  const cash=await createAccount(db,{name:'Cash',type:'cash',initial_balance_cents:20000});
+  const coffee=(await categories.getExpenseCategories(db)).find(r=>r.name==='Coffee');
+  const drinks=await categories.createCategory(db,{name:'Drinks replacement',type:'expense'});
+  const row=await createTransaction(db,{account_id:cash.id,category_id:coffee.id,type:'expense',amount_cents:100,description:'Coffee with Elona',transaction_date:'2026-10-31'});
+  const input={from_account_id:bank.id,to_account_id:cash.id,amount_cents:10000,transfer_date:'2026-10-31',note:'ATM'};
+  const transfer=await transfers.saveTransfer(db,input);
+  source.restart();db=source.adapter;
+  await categories.deleteCategory(db,coffee.id,drinks.id);
+  api.failTable='transfers';await assert.rejects(new SyncEngine().run(db,api,context),/Disconnected/);
+  assert.equal((await pendingCounts(db)).transfers,1);
+  api.failTable=null;
+  api.beforePush=async(table,r)=>{if(table==='transfers'){assert.ok(api.tables.accounts.has(r.from_account_id));assert.ok(api.tables.accounts.has(r.to_account_id));}};
+  await new SyncEngine().run(db,api,context);
+  await initializeDatabase(destination.adapter);
+  await new SyncEngine().run(destination.adapter,api,context);
+  assert.equal(await getAccountBalance(destination.adapter,bank.id),90000);
+  assert.equal(await getAccountBalance(destination.adapter,cash.id),29900);
+  assert.equal((await transfers.getTransferById(destination.adapter,transfer.id)).note,'ATM');
+  assert.equal(await categories.getCategoryById(destination.adapter,coffee.id),null);
+  // A stale offline category rename must not resurrect a cloud deletion.
+  await destination.adapter.runAsync("UPDATE categories SET deleted_at=NULL,name='Stale rename',sync_status='pending' WHERE id=?",coffee.id);
+  await new SyncEngine().run(destination.adapter,api,context);
+  assert.equal(await categories.getCategoryById(destination.adapter,coffee.id),null);
+  const restored=await destination.adapter.getFirstAsync('SELECT * FROM transactions WHERE id=?',row.id);
+  assert.equal(restored.category_id,drinks.id);assert.equal(restored.description,'Coffee with Elona');
+  await transfers.saveTransfer(db,{...input,amount_cents:15000},transfer.id);
+  await new SyncEngine().run(db,api,context);await new SyncEngine().run(destination.adapter,api,context);
+  assert.equal(await getAccountBalance(destination.adapter,bank.id),85000);
+  await transfers.deleteTransfer(db,transfer.id);await new SyncEngine().run(db,api,context);await new SyncEngine().run(destination.adapter,api,context);
+  assert.equal(await getAccountBalance(destination.adapter,bank.id),100000);
+  assert.equal(await transfers.getTransferById(destination.adapter,transfer.id),null);
+  await initializeDatabase(destination.adapter);assert.equal(await categories.getCategoryById(destination.adapter,coffee.id),null);
+  assert.deepEqual(await destination.adapter.getAllAsync('PRAGMA foreign_key_check'),[]);
+ }finally{source.sqlite.close();destination.sqlite.close();}
 });

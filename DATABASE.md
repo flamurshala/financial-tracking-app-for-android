@@ -85,3 +85,12 @@ Migration 4 preserves earlier migrations and records, adds `description_search` 
 ## Phase 7 local privacy and management
 
 No schema migration or data reset was introduced. Theme uses `app_metadata` key `settings.theme`. App Lock policy is stored only in a separate device-local SecureStore key; it does not sync. New restore functions for accounts/categories preserve IDs, history and money and update timestamps/pending sync state. Local archival of the stable Other category is rejected. Built-in names are fixed in the management UI without changing the existing repository/sync update contract. Account archival keeps its existing contract; the UI warns explicitly before archiving the last active account. The controller and root gate determine local UI access independently from SQL balances or Supabase session status. See PHASE7.md.
+
+
+## Migration 7: account transfers
+
+`transfers` stores UUID identity, `from_account_id`, `to_account_id`, positive safe integer `amount_cents`, `transfer_date`, optional-text `note`, timestamps, `deleted_at`, `sync_status`, `local_revision`, and `server_version`. Both account foreign keys use RESTRICT. Source and destination must differ. Repository validation checks real calendar dates and account availability. Indexes cover each account, date ordering and sync. No existing table is dropped or rebuilt.
+
+Account balances include each active transfer once as an outgoing debit and once as an incoming credit. Combined wealth and transaction statistics exclude transfers because both effects cancel. Categories use existing deletion markers; deletion reassigns all transaction references and marks all touched rows pending atomically. Seed migration 3 is unchanged because it already runs only once and preserves tombstones via ID conflict handling.
+
+Supabase uses the same transfers fields plus `user_id` and server-assigned `sync_version`. Composite account foreign keys include `user_id`, RLS restricts SELECT/INSERT/UPDATE to `auth.uid() = user_id`, and ordinary DELETE is denied. Apply `supabase/migrations/007_transfers.sql` once on existing deployments. The full schema includes this increment for fresh deployments.

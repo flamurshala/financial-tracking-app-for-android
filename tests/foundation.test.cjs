@@ -27,7 +27,7 @@ test("initialization is repeatable and preserves parameterized data", async () =
     );
     assert.equal(
       (await adapter.getAllAsync("SELECT * FROM schema_migrations")).length,
-      6,
+      7,
     );
     assert.equal(
       (await adapter.getFirstAsync("PRAGMA foreign_keys")).foreign_keys,

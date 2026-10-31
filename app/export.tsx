@@ -31,7 +31,7 @@ export default function ExportScreen() {
       mounted.current = false;
     };
   }, []);
-  const run = async (kind: "csv" | "json") => {
+  const run = async (kind: "csv" | "json" | "transfers") => {
     if (running.current) return;
     running.current = true;
     setBusy(true);
@@ -89,6 +89,8 @@ export default function ExportScreen() {
   return (
     <Screen>
       <SectionTitle>Export Data</SectionTitle>
+      <Body>Transfers are exported separately with source and destination accounts. This export includes all active transfers, regardless of transaction filters.</Body>
+      <Button title="Export Transfers CSV" disabled={busy} onPress={() => void run("transfers")} />
       <Card>
         <Body>
           Exports contain personal financial information. Choose a trusted

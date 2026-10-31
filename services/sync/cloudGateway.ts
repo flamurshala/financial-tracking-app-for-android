@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../supabase';
-import { remoteSchemas, type FinancialTable, type RemoteRecord, type RemoteAccount, type RemoteCategory, type RemoteTransaction } from '../../types/sync';
+import { remoteSchemas, type FinancialTable, type RemoteRecord, type RemoteAccount, type RemoteCategory, type RemoteTransaction, type RemoteTransfer } from '../../types/sync';
 export interface CloudGateway {
   push: (table: FinancialTable, row: RemoteRecord) => Promise<RemoteRecord>;
   find: (table: FinancialTable, userId: string, id: string) => Promise<RemoteRecord | null>;
@@ -16,6 +16,7 @@ export function supabaseGateway(): CloudGateway {
         ? client.from('accounts').upsert(input as Omit<RemoteAccount, 'updated_at' | 'sync_version'>, { onConflict: 'user_id,id' }).select().single()
         : table === 'categories'
           ? client.from('categories').upsert(input as Omit<RemoteCategory, 'updated_at' | 'sync_version'>, { onConflict: 'user_id,id' }).select().single()
+          : table === 'transfers' ? client.from('transfers').upsert(input as Omit<RemoteTransfer, 'updated_at' | 'sync_version'>, { onConflict: 'user_id,id' }).select().single()
           : client.from('transactions').upsert(input as Omit<RemoteTransaction, 'updated_at' | 'sync_version'>, { onConflict: 'user_id,id' }).select().single();
       const { data, error } = await query;
       if (error) throw error;

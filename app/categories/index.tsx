@@ -12,7 +12,7 @@ import {
   getCategories,
 } from "../../database/repositories/categoryRepository";
 import type { Category } from "../../types/finance";
-import { protectedCategoryIds } from "../../constants/categoryProtection";
+import { CategoryDeletionForm } from "../../components/finance/CategoryDeletionForm";
 export default function Categories() {
   const db = useSQLiteContext();
   const query = useLocalQuery(
@@ -21,6 +21,7 @@ export default function Categories() {
   const [editing, setEditing] = useState<Category | null | undefined>(
     undefined,
   );
+  const [deleting,setDeleting] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const archive = async (category: Category) => {
     if (busy) return;
@@ -41,9 +42,9 @@ export default function Categories() {
   return (
     <Screen>
       <Body>
-        Built-in names remain fixed. Archiving hides categories from new entries
-        and keeps their history and statistics.
+        Archive categories to hide them from new entries, or permanently delete any category after reassigning its transactions.
       </Body>
+      {deleting ? <CategoryDeletionForm key={deleting} id={deleting} onDone={() => setDeleting(null)} /> : null}
       {editing !== undefined ? (
         <CategoryManagerForm
           key={editing?.id ?? "new"}
@@ -82,8 +83,7 @@ export default function Categories() {
                     onPress={() => setEditing(category)}
                   />
                 ) : null}
-                {!protectedCategoryIds.has(category.id) ||
-                category.is_archived ? (
+                {(
                   <Button
                     secondary
                     title={`${category.is_archived ? "Restore" : "Archive"} ${category.name}`}
@@ -104,9 +104,8 @@ export default function Categories() {
                         );
                     }}
                   />
-                ) : (
-                  <Body>Other remains available for transaction entry.</Body>
                 )}
+                <Button secondary title="Delete Category" disabled={busy || Boolean(deleting)} onPress={() => setDeleting(category.id)} />
               </Card>
             ))}
         </View>

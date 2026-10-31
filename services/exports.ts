@@ -12,6 +12,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import type { TransactionFilters } from "../types/statistics";
 import {
   writeCsv,
+  writeTransfersCsv,
   writeJsonBackup,
 } from "../database/repositories/exportRepository";
 import { importTemplate } from "../utils/csvImport";
@@ -19,17 +20,18 @@ import { appLock } from "./appLock";
 /** Files stay in private cache for recipients; delete previous-day exports on next export. */
 export async function shareFinanceExport(
   db: SQLiteDatabase,
-  kind: "csv" | "json",
+  kind: "csv" | "json" | "transfers",
   filters: TransactionFilters,
   label: string,
   progress: (count: number) => void,
   cancelled: () => boolean,
 ) {
   return shareLocalCsvOrJson(
-    kind,
+    kind === "transfers" ? "csv" : kind,
     label,
     async (write, check) => {
-      if (kind === "csv") await writeCsv(db, filters, write, check, progress);
+      if (kind === "transfers") await writeTransfersCsv(db, write, check);
+      else if (kind === "csv") await writeCsv(db, filters, write, check, progress);
       else await writeJsonBackup(db, write, check);
     },
     cancelled,

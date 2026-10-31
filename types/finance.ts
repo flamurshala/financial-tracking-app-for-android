@@ -34,3 +34,19 @@ export interface Transaction extends SyncRecord {
   transaction_date: string;
   is_balance_adjustment: 0 | 1;
 }
+
+export interface Transfer extends SyncRecord {
+  from_account_id: string;
+  to_account_id: string;
+  amount_cents: MinorUnits;
+  transfer_date: string;
+  note: string;
+}
+export type CreateTransferInput = Pick<Transfer, 'from_account_id' | 'to_account_id' | 'amount_cents' | 'transfer_date' | 'note'>;
+export type UpdateTransferInput = CreateTransferInput;
+export interface CategoryDeletionPlan {
+  category: Category;
+  transactionCount: number;
+  replacements: Category[];
+}
+export interface CategoryReassignmentResult { moved: number }

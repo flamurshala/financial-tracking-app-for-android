@@ -23,6 +23,8 @@ export default function Accounts() {
   return (
     <Screen>
       <Notice />
+      <Button title="Transfer Money" onPress={() => router.push('/transfer/add')} />
+      <Button secondary title="Transfer History" onPress={() => router.push('/transfers')} />
       <Button
         title="+ Create Account"
         onPress={() => router.push("/account/add")}
@@ -50,6 +52,7 @@ export default function Accounts() {
             Initial: {formatAmount(account.initial_balance_cents)} ·{" "}
             {account.currency}
           </Body>
+          {!account.is_archived ? <Button secondary title="Transfer" onPress={() => router.push({pathname:'/transfer/add',params:{fromAccountId:account.id}})} /> : null}
           <Button
             secondary
             title="View account"

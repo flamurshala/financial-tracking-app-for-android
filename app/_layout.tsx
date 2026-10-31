@@ -49,6 +49,9 @@ export default function RootLayout() {
                   contentStyle: { backgroundColor: colors.background },
                 }}
               >
+                <Stack.Screen name="transfers" options={{title:"Transfer History"}} />
+                <Stack.Screen name="transfer/add" options={{title:"Transfer Money",presentation:"modal"}} />
+                <Stack.Screen name="transfer/[id]" options={{title:"Transfer Details"}} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen
                   name="(auth)/login"

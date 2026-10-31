@@ -89,26 +89,13 @@ export async function getAccountBalance(
   id: string,
 ): Promise<number> {
   validateId(id);
-  // One statement gives a consistent snapshot even if another connection writes.
-  const rows = await db.getAllAsync<{
-    initial_balance_cents: number;
-    amount_cents: number | null;
-    type: "income" | "expense" | null;
-  }>(
-    `SELECT a.initial_balance_cents, t.amount_cents, t.type FROM accounts a LEFT JOIN transactions t ON t.account_id = a.id AND t.deleted_at IS NULL WHERE a.id = ? AND a.deleted_at IS NULL`,
-    id,
-  );
-  if (rows.length === 0) throw new Error("Account not found");
-  return sumCents([
-    rows[0].initial_balance_cents,
-    ...rows.map((row) =>
-      row.amount_cents === null
-        ? 0
-        : row.type === "income"
-          ? row.amount_cents
-          : -row.amount_cents,
-    ),
-  ]);
+  const account = await getAccountById(db, id);
+  if (!account) throw new Error("Account not found");
+  const rows = await db.getAllAsync<{ cents: number }>(`SELECT initial_balance_cents AS cents FROM accounts WHERE id=?
+    UNION ALL SELECT CASE type WHEN 'income' THEN amount_cents ELSE -amount_cents END FROM transactions WHERE account_id=? AND deleted_at IS NULL
+    UNION ALL SELECT -amount_cents FROM transfers WHERE from_account_id=? AND deleted_at IS NULL
+    UNION ALL SELECT amount_cents FROM transfers WHERE to_account_id=? AND deleted_at IS NULL`,id,id,id,id);
+  return sumCents(rows.map(row => row.cents));
 }
 /** Includes archived accounts: they still represent owned money. */
 export async function getCombinedBalance(db: SQLiteDatabase): Promise<number> {

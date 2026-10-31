@@ -16,16 +16,15 @@ export interface TransactionView extends Transaction {
 export async function getAccountBalances(
   db: SQLiteDatabase,
 ): Promise<AccountBalance[]> {
-  const rows = await db.getAllAsync<Account & { ledger_cents: string }>(
-    "SELECT a.*, CAST(COALESCE(SUM(CASE t.type WHEN 'income' THEN t.amount_cents ELSE -t.amount_cents END),0) AS TEXT) AS ledger_cents FROM accounts a LEFT JOIN transactions t ON t.account_id=a.id AND t.deleted_at IS NULL WHERE a.deleted_at IS NULL GROUP BY a.id ORDER BY a.is_archived,a.name COLLATE NOCASE,a.id",
-  );
-  return rows.map(({ ledger_cents, ...account }) => {
-    const total = BigInt(ledger_cents) + BigInt(account.initial_balance_cents);
-    if (
-      total > BigInt(Number.MAX_SAFE_INTEGER) ||
-      total < BigInt(Number.MIN_SAFE_INTEGER)
-    )
-      throw new Error("Calculated amount exceeds safe integer cents");
+  const accounts = await db.getAllAsync<Account>("SELECT * FROM accounts WHERE deleted_at IS NULL ORDER BY is_archived,name COLLATE NOCASE,id");
+  const ledger = await db.getAllAsync<{ account_id: string; cents: number }>(`SELECT account_id, CASE type WHEN 'income' THEN amount_cents ELSE -amount_cents END AS cents FROM transactions WHERE deleted_at IS NULL
+    UNION ALL SELECT from_account_id,-amount_cents FROM transfers WHERE deleted_at IS NULL
+    UNION ALL SELECT to_account_id,amount_cents FROM transfers WHERE deleted_at IS NULL`);
+  const totals = new Map<string, bigint>();
+  for (const row of ledger) totals.set(row.account_id,(totals.get(row.account_id) ?? 0n)+BigInt(row.cents));
+  return accounts.map(account => {
+    const total = BigInt(account.initial_balance_cents)+(totals.get(account.id) ?? 0n);
+    if (total > BigInt(Number.MAX_SAFE_INTEGER) || total < BigInt(Number.MIN_SAFE_INTEGER)) throw new Error('Calculated amount exceeds safe integer cents');
     return { ...account, balance_cents: Number(total) };
   });
 }

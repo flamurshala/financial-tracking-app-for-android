@@ -291,7 +291,7 @@ export default function Settings() {
             <Body>
               Sync Debug: pending accounts {sync.pending.accounts}, categories{" "}
               {sync.pending.categories}, transactions{" "}
-              {sync.pending.transactions}
+              {sync.pending.transactions}, transfers {sync.pending.transfers}
             </Body>
             <Body>Cloud user: {session?.user.id ?? "none"}</Body>
           </>

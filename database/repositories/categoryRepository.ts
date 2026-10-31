@@ -1,4 +1,3 @@
-import { protectedCategoryIds } from "../../constants/categoryProtection";
 import type { SQLiteDatabase } from "expo-sqlite";
 import type { Category, TransactionType } from "../../types/finance";
 import {
@@ -87,8 +86,6 @@ export async function archiveCategory(
   db: SQLiteDatabase,
   id: string,
 ): Promise<void> {
-  if (protectedCategoryIds.has(id))
-    throw new Error("Other must remain available for transaction entry.");
   await archiveRecord(db, "categories", id);
 }
 export async function restoreCategory(
@@ -111,4 +108,24 @@ export function getExpenseCategories(db: SQLiteDatabase) {
 }
 export function getIncomeCategories(db: SQLiteDatabase) {
   return getCategories(db, { type: "income" });
+}
+
+export async function getCategoryDeletionPlan(db: SQLiteDatabase, id: string): Promise<import('../../types/finance').CategoryDeletionPlan> {
+  const category = await getCategoryById(db,id);
+  if (!category) throw new Error('Category not found');
+  const usage = await db.getAllAsync<{type: TransactionType; count: number}>('SELECT type,COUNT(*) AS count FROM transactions WHERE category_id=? GROUP BY type',id);
+  const required = usage.length ? usage.map(row => row.type) : category.type === 'both' ? ['expense','income'] : [category.type];
+  const replacements = (await getCategories(db)).filter(row => row.id !== id && required.every(type => row.type === 'both' || row.type === type));
+  return {category, transactionCount: usage.reduce((sum,row)=>sum+row.count,0), replacements};
+}
+export async function deleteCategory(db: SQLiteDatabase, id: string, replacementId?: string): Promise<import('../../types/finance').CategoryReassignmentResult> {
+  return withWriteTransaction(db,async tx => {
+    const plan = await getCategoryDeletionPlan(tx,id);
+    if (plan.transactionCount && !plan.replacements.some(row => row.id === replacementId)) throw new Error('Choose a different compatible active replacement category. Create one first if none is available.');
+    const now = new Date().toISOString();
+    // Include deleted history so restored/synchronized records retain valid references.
+    if (plan.transactionCount) await tx.runAsync("UPDATE transactions SET category_id=?,updated_at=?,sync_status='pending' WHERE category_id=?",replacementId!,now,id);
+    await tx.runAsync("UPDATE categories SET deleted_at=?,updated_at=?,sync_status='pending' WHERE id=?",now,now,id);
+    return { moved: plan.transactionCount };
+  });
 }

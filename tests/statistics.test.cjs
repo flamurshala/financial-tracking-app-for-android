@@ -416,7 +416,7 @@ test("version 3 upgrade backfills Unicode search without changing financial meta
     assert.equal(row.sync_status, "synced");
     assert.equal(
       (await db.getAllAsync("SELECT * FROM schema_migrations")).length,
-      6,
+      7,
     );
   } finally {
     result.sqlite.close();

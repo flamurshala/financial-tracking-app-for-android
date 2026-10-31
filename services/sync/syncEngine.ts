@@ -29,10 +29,10 @@ export class SyncEngine {
         for (const row of rows) {
           guard();
           // Fresh local built-ins must not overwrite a restored cloud customization.
-          const existing = table === 'categories' && 'is_default' in row && row.is_default === 1 && row.local_revision === 0 && row.server_version === 0
+          const existing = table === 'categories'
             ? await gateway.find(table, context.userId, row.id) : null;
           guard();
-          if (existing) {
+          if (existing && (existing.deleted_at || ('is_default' in row && row.is_default === 1 && row.local_revision === 0 && row.server_version === 0))) {
             await withWriteTransaction(db, async tx => {
               guard();
               await tx.runAsync(`UPDATE categories SET sync_status = 'synced' WHERE id = ? AND local_revision = ? AND sync_status <> 'synced'`, row.id, row.local_revision);
@@ -54,7 +54,7 @@ export class SyncEngine {
     const previous = Number(await getMetadata(db, 'cloud_sync_cursor') ?? 0);
     const through = await gateway.cursor();
     if (!Number.isSafeInteger(previous) || through < previous) throw new Error('Cloud cursor moved backwards. Restore requires explicit handling.');
-    const remoteRows: Record<FinancialTable, RemoteRecord[]> = { accounts: [], categories: [], transactions: [] };
+    const remoteRows: Record<FinancialTable, RemoteRecord[]> = { accounts: [], categories: [], transactions: [], transfers: [] };
     let pulled = 0;
     for (const table of financialTables) {
       let afterId: string | null = null;
@@ -73,6 +73,6 @@ export class SyncEngine {
     const lastSync = new Date().toISOString(); // UI audit time only; never a conflict/cursor clock.
     await commitPull(db, context.userId, remoteRows, through, lastSync, context.isAuthorized);
     const counts = await pendingCounts(db);
-    return { pushed, pulled, pending: counts.accounts + counts.categories + counts.transactions, lastSync };
+    return { pushed, pulled, pending: Object.values(counts).reduce((sum, count) => sum + count, 0), lastSync };
   }
 }

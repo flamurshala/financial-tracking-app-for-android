@@ -10,7 +10,7 @@ const {
 } = require("../database/repositories/statisticsRepository.ts");
 const { saveTheme, loadPreferences } = require("../services/preferences.ts");
 const { useSettingsStore } = require("../store/settingsStore.ts");
-test("category edits and archive/restore preserve IDs, amounts and pending sync; Other stays available", async () => {
+test("category edits and archive/restore preserve IDs, amounts and pending sync; all categories can be archived", async () => {
   const fixture = database();
   const db = fixture.adapter;
   try {
@@ -58,11 +58,7 @@ test("category edits and archive/restore preserve IDs, amounts and pending sync;
       (await categories.getCategoryById(db, category.id)).sync_status,
       "pending",
     );
-    await assert.rejects(
-      () =>
-        categories.archiveCategory(db, "00000000-0000-4000-8000-000000000018"),
-      /remain available/,
-    );
+    await categories.archiveCategory(db, "00000000-0000-4000-8000-000000000018");
     await accounts.archiveAccount(db, account.id);
     assert.equal(await accounts.getAccountBalance(db, account.id), 8766);
     assert.equal((await accounts.getAccounts(db)).length, 0);

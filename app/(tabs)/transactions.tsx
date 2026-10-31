@@ -25,6 +25,7 @@ export default function Transactions() {
       header={
         <>
           <Notice />
+          <Button secondary title="Transfer History" onPress={() => router.push("/transfers")} />
           <Button
             title="+ Add Transaction"
             onPress={() => router.push("/transaction/add")}

@@ -134,3 +134,26 @@ Today now precedes This Month on Home; descriptions are optional with category f
 Share the template from Settings → Data → Import Transactions. Its required headers are `Date,Type,Amount,Description,Category,Account`; their order and capitalization may vary. Use valid YYYY-MM-DD dates, Expense/Income types and positive EUR amounts with at most two decimal places. Description values can be blank. Quoted commas, multiline descriptions and UTF-8 names are supported.
 
 Preview reports invalid rows before any writes. Map unknown account names to existing active accounts and explicitly approve new categories; their type is derived as expense, income or both. Confirm the valid rows and the skipped count. The import commits atomically to SQLite, then the existing pending-record Supabase sync runs. Initial balances remain unchanged. Migration 6 records local content fingerprints: repeated files require an explicit Import Anyway decision. Warnings apply to this device's import history, while identical legitimate rows within a file remain separate transactions.
+
+
+## Account Transfers
+
+Use **Accounts → Transfer Money**, or **Transfer** on an active account to preselect the source. Choose different source/destination accounts, a positive amount, a valid date and an optional note. Transfers move money between accounts without affecting income/expense statistics or total wealth. Amounts remain integer cents. The existing app allows negative balances; transfers preserve that rule.
+
+**Transfer History** is available from Accounts and Transactions. Open a transfer to view its accounts, amount, date and note, edit it, or confirm deletion. Balances are derived from opening balances + income − expenses + incoming transfers − outgoing transfers (including balance adjustments in the transaction ledger). Edits and deletions recalculate balances automatically. Archived accounts cannot receive new transfers; existing archived-account history remains visible and editable without introducing new archived accounts.
+
+Transfers save offline immediately, survive restart and synchronize after accounts through the existing revision-based sync engine. JSON backup includes transfer records and tombstones. Export Data offers a separate **Export Transfers CSV** action for all active transfers; transaction export filters do not apply to that file. Transfer CSV import is not supported: create transfers manually. Transaction CSV import still accepts income/expense rows only.
+
+## Category Deletion
+
+Every custom or built-in category can be permanently removed in Category Management. If any transactions reference it, choose a different compatible active category before confirming deletion. All references, including soft-deleted transaction history, are reassigned in one SQLite transaction. Descriptions, amounts, dates and transaction IDs stay unchanged; reports and filters refresh immediately.
+
+Replacement choices support every referenced transaction type. Mixed income/expense history requires a `both` replacement. If no compatible category exists, cancel and create one first. Duplicate names are supported; selection uses category IDs and the deletion picker includes ID suffixes.
+
+Deletion is permanent in the UI. SQLite and Supabase retain deletion tombstones so offline devices can learn about deletion. Reassigned transactions and deleted categories are marked pending for sync. No financial history is physically deleted. Default categories are seeded only by the existing one-time migration 3; intentionally deleted defaults are not recreated on later launches. Fresh-device sync adopts existing cloud default-category tombstones. CSV imports treat deleted names as unknown and require approval to create a new custom category with a new UUID.
+
+### Upgrade and verification
+
+SQLite migration 7 creates only the transfers table, indexes and revision trigger. It preserves existing tables and records. For an **existing Supabase project**, run `supabase/migrations/007_transfers.sql` once in SQL Editor before synchronizing this app version. For a fresh project use `supabase/schema.sql`, which already includes transfers; do not run both scripts on a fresh database.
+
+Tests require Node 24 (the Node SQLite test adapter is unavailable in Node 20). Run `npm run typecheck`, `npm run lint`, and `npm test`. See `IMPLEMENTATION-TRANSFERS-CATEGORIES.md` for the analysis, changed-file inventory, test evidence and remaining device checks.

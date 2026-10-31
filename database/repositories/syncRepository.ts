@@ -1,10 +1,10 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { Account, Category, Transaction } from '../../types/finance';
+import type { Account, Category, Transaction, Transfer } from '../../types/finance';
 import { financialTables, remoteSchemas, type FinancialTable, type LocalSyncMetadata, type RemoteRecord } from '../../types/sync';
 import { getMetadata, setMetadata } from './metadataRepository';
 import { withWriteTransaction } from './shared';
 import { normalizeSearchText } from '../../utils/search';
-export type LocalRecord = (Account | Category | Transaction) & LocalSyncMetadata;
+export type LocalRecord = (Account | Category | Transaction | Transfer) & LocalSyncMetadata;
 export class OwnerMismatchError extends Error {
   constructor() { super('This device belongs to another cloud account. Sign in with its original account to synchronize.'); }
 }
@@ -23,7 +23,7 @@ export function pendingRows(db: SQLiteDatabase, table: FinancialTable, limit = 1
   return db.getAllAsync<LocalRecord>(`SELECT * FROM ${table} WHERE sync_status <> 'synced' ORDER BY id LIMIT ?`, limit);
 }
 export async function pendingCounts(db: SQLiteDatabase) {
-  const counts = { accounts: 0, categories: 0, transactions: 0 };
+  const counts = { accounts: 0, categories: 0, transactions: 0, transfers: 0 };
   for (const table of financialTables) counts[table] = (await db.getFirstAsync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table} WHERE sync_status <> 'synced'`))?.count ?? 0;
   return counts;
 }
@@ -32,6 +32,7 @@ export function toRemote(table: FinancialTable, row: LocalRecord, userId: string
   if (table === 'accounts' && 'initial_balance_cents' in row) return remoteSchemas.accounts.parse({ ...base, name: row.name, type: row.type, currency: row.currency, initial_balance_cents: row.initial_balance_cents, is_archived: Boolean(row.is_archived) });
   if (table === 'categories' && 'is_default' in row) return remoteSchemas.categories.parse({ ...base, name: row.name, type: row.type, icon: row.icon, is_default: Boolean(row.is_default), is_archived: Boolean(row.is_archived) });
   if (table === 'transactions' && 'account_id' in row) return remoteSchemas.transactions.parse({ ...base, account_id: row.account_id, category_id: row.category_id, type: row.type, amount_cents: row.amount_cents, description: row.description, transaction_date: row.transaction_date, is_balance_adjustment: Boolean(row.is_balance_adjustment) });
+  if (table === 'transfers' && 'from_account_id' in row) return remoteSchemas.transfers.parse({ ...base, from_account_id: row.from_account_id, to_account_id: row.to_account_id, amount_cents: row.amount_cents, transfer_date: row.transfer_date, note: row.note });
   throw new Error('Entity/table mismatch');
 }
 // Compare revisions, not phone-clock timestamps: even two edits in the same millisecond are distinct.
@@ -42,8 +43,8 @@ export async function mergeRemote(db: SQLiteDatabase, table: FinancialTable, unk
   const remote = remoteSchemas[table].parse(unknownRow);
   if (remote.user_id !== userId) throw new Error('Remote owner mismatch');
   const current = await db.getFirstAsync<LocalRecord>(`SELECT * FROM ${table} WHERE id = ?`, remote.id);
-  if (current && current.sync_status !== 'synced') return; // Never discard an unsent edit.
-  if (current && current.server_version >= remote.sync_version) return;
+  if (current && current.sync_status !== 'synced' && !(table === 'categories' && remote.deleted_at)) return; // Never discard an unsent edit.
+  if (current && current.server_version >= remote.sync_version && !(table === 'categories' && remote.deleted_at && !current.deleted_at)) return;
   const { user_id: _owner, sync_version, ...fields } = remote;
   const local: Record<string, string | number | null> = {};
   for (const [key, value] of Object.entries(fields)) local[key] = typeof value === 'boolean' ? Number(value) : value;

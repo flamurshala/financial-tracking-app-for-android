@@ -63,6 +63,7 @@ export async function writeJsonBackup(
         "id,name,type,currency,initial_balance_cents,is_archived,created_at,updated_at,deleted_at",
       categories:
         "id,name,type,icon,is_default,is_archived,created_at,updated_at,deleted_at",
+      transfers: "id,from_account_id,to_account_id,amount_cents,transfer_date,note,created_at,updated_at,deleted_at",
       transactions:
         "id,account_id,category_id,type,amount_cents,description,transaction_date,is_balance_adjustment,created_at,updated_at,deleted_at",
     } as const;
@@ -86,5 +87,22 @@ export async function writeJsonBackup(
       await write("]");
     }
     await write("}");
+  });
+}
+
+/** Separate CSV: transfers never masquerade as income or expenses. */
+export async function writeTransfersCsv(db: SQLiteDatabase, write: Write, check = () => {}) {
+  const { csvCell } = await import('../../utils/exportCsv');
+  const { centsToDecimal } = await import('../../utils/currency');
+  return withReadSnapshot(db,async tx => {
+    await write('\uFEFF'+['record_type','date','from_account','to_account','amount','currency','note','id'].map(v=>csvCell(v)).join(',')+'\r\n');
+    let after='';
+    while(true) {
+      check();
+      const rows=await tx.getAllAsync<import('./transferRepository').TransferView>(`SELECT t.*,f.name AS from_account_name,a.name AS to_account_name FROM transfers t JOIN accounts f ON f.id=t.from_account_id JOIN accounts a ON a.id=t.to_account_id WHERE t.deleted_at IS NULL AND t.id>? ORDER BY t.id LIMIT 500`,after);
+      if(!rows.length)break;
+      for(const row of rows) await write(['Transfer',row.transfer_date,row.from_account_name,row.to_account_name,centsToDecimal(row.amount_cents),'EUR',row.note,row.id].map(v=>csvCell(v,true)).join(',')+'\r\n');
+      after=rows[rows.length-1].id;
+    }
   });
 }
